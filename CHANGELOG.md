@@ -2,6 +2,17 @@
 
 ## 2026-03-26
 
+### dev-workflow v1.3.0 / dev-workflow-bundle v1.3.0
+
+- feat: Make reviewer skill configurable via `reviewer` setting in `dev-workflow.local.md`
+  - Supported: ask-peer, ask-claude, ask-codex, ask-gemini, ask-copilot (default: ask-peer)
+  - Unsupported or unspecified values fall back to ask-peer
+  - Init Mode now includes reviewer selection step
+  - All ask-* skills added to allowed-tools
+- refactor: Generalize "peer" references in Step 3/8 headings and descriptions
+  - `Peer Plan Review` → `Plan Review`, `Peer Code Review` → `Code Review`
+  - `Skill({reviewer})` template replaced with natural language instructions
+
 ### peer v2.1.0 / dev-workflow-bundle v1.2.1
 
 - feat: Add "Implementation discussion → Structured tradeoff analysis" to Output Format
