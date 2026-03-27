@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-03-27
+
+### dev-workflow v1.4.0 / dev-workflow-bundle v1.4.0
+
+- feat: Strengthen code review (Step 8) enforcement to prevent skipping
+  - Add TodoWrite-based workflow phase tracking in Step 1 (all phases registered upfront, phase items must remain)
+  - Add GATE check between Step 7 and Step 8 (verify prior steps completed)
+  - Add `MANDATORY, DO NOT SKIP` marker to Step 8 header
+  - Structure review request into 3 categories (Correctness, Conventions, Simplicity)
+  - Add iteration status tracking via TodoWrite in Step 8
+- fix: Change review loop condition from "code modified" to "actionable feedback remains"
+- fix: Use base-commit (`git rev-parse HEAD` at Step 2) instead of `HEAD` for accurate diff across intermediate commits
+- feat: Require reviewer to explicitly state "No actionable findings" when no issues found
+- feat: Strengthen plan review (Step 3) with same improvements
+  - Structure review request into 3 categories (Scope & feasibility, Approach & alternatives, Completeness)
+  - Include `.claude/rules/` compliance as explicit review dimension
+  - Fix review loop condition from "plan modified" to "actionable feedback remains"
+  - Require reviewer to explicitly state "No actionable findings" when no issues found
+- chore: Add `Bash(git rev-parse *)` to allowed-tools
+
 ## 2026-03-26
 
 ### dev-workflow v1.3.0 / dev-workflow-bundle v1.3.0
