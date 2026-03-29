@@ -21,5 +21,12 @@
    d. **Fallback**: If no test commands detected, propose project-type standard command (e.g., `cargo test`, `python -m pytest`) or ask user
 5. Ask user which reviewer skill to use (default: ask-peer)
    - Options: ask-peer, ask-claude, ask-codex, ask-gemini, ask-copilot
-6. Present detected commands, test approach, and reviewer to user for confirmation
-7. On user approval, save `.claude/dev-workflow.local.md` and write generated skill files (if any from 4b)
+6. Present detected commands, test approach, review_iterations (default: 3), and reviewer to user for confirmation
+7. On user approval, save `.claude/dev-workflow.local.md` (including reviewer, review_iterations, check_commands, and test_commands) and write generated skill files (if any from 4b)
+8. Verify commands and skills work
+   - Run each check_command and report pass/fail
+   - Run each test_command:
+     - Shell commands: run directly and report pass/fail
+     - `Skill()` entries: select one test file and invoke the skill with it. If no suitable test file is found or file-specific test execution is not supported, run the minimum test scope. If that is also not feasible, skip and report the reason
+   - Display results summary
+   - If any command/skill fails, suggest fixes but do not block (config is already saved)

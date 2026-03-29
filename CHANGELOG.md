@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-03-30
+
+### dev-workflow v1.11.0 / dev-workflow-bundle v1.11.0
+
+- feat: Add `review_iterations` default value (3) to `--init` generated config file
+- feat: Add verification step after `--init` config creation
+  - Run check_commands and test_commands to verify they work
+  - `Skill()` entries: select a test file and invoke the skill, or run minimum test scope
+  - Report pass/fail summary; failures suggest fixes but do not block
+
 ## 2026-03-28
 
 ### dev-workflow v1.10.0 / dev-workflow-bundle v1.10.0
