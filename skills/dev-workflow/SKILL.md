@@ -103,7 +103,10 @@ Mark `Step 3: Plan Review` as `in_progress`. Process each pending iteration item
      c. **Completeness**: edge cases, error handling, test plan adequacy
    - Reviewer should only report actionable findings. If none, explicitly state "No actionable findings"
 2. If reviewer returned "No actionable findings": mark this and remaining iteration items as `completed` (skip). Mark `Step 3: Plan Review` as `completed` and proceed to Step 4.
-3. Otherwise: apply improvements, reject inapplicable points with reason. Mark this iteration item as `completed`. Continue to the next pending iteration item (back to step 1) with:
+3. Otherwise: apply improvements, reject inapplicable points with reason. Mark this iteration item as `completed`.
+   - If plan was modified: MUST continue to the next pending iteration item (back to step 1) for re-review — do not skip even if you believe all issues are resolved
+   - If all points were rejected (no modifications): mark remaining iteration items as `completed` (skip)
+   Continue to the next pending iteration item with:
    - the updated plan
    - a summary of changes made and rejections with reasons
    - the same three-category structure, `.claude/rules/` reference, and "No actionable findings" requirement
@@ -153,7 +156,10 @@ Mark `Step 8: Code Review` as `in_progress`. Process each pending iteration item
      c. **Simplicity & maintainability**: unnecessary complexity, duplication, unclear abstractions
    - Reviewer should only report actionable findings. If none, explicitly state "No actionable findings"
 2. If reviewer returned "No actionable findings": mark this and remaining iteration items as `completed` (skip). Mark `Step 8: Code Review` as `completed` and proceed to Step 9.
-3. Otherwise: fix genuine issues, reject inapplicable points with reason. Re-run Step 7 if code was modified. Mark this iteration item as `completed`. Continue to the next pending iteration item (back to step 1) with:
+3. Otherwise: fix genuine issues, reject inapplicable points with reason. Mark this iteration item as `completed`.
+   - If code was modified: re-run Step 7, then MUST continue to the next pending iteration item (back to step 1) for re-review — do not skip even if you believe all issues are resolved
+   - If all points were rejected (no modifications): mark remaining iteration items as `completed` (skip)
+   Continue to the next pending iteration item with:
    - the latest `git diff <base-commit>`
    - a summary of fixes made and rejections with reasons
    - the same three-category structure, `.claude/rules/` reference, and "No actionable findings" requirement

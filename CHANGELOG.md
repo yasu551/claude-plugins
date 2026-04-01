@@ -2,6 +2,13 @@
 
 ## 2026-04-01
 
+### dev-workflow v1.15.1
+
+- fix: Ensure re-review after modifications in Plan Review (Step 3) and Code Review (Step 8)
+  - If plan/code was modified based on review feedback, MUST continue to next iteration for re-review
+  - If all points were rejected (no modifications), remaining iterations can be skipped
+  - Step 8: Consolidate "Re-run Step 7" and "re-review required" under single "code was modified" branch
+
 ### dev-workflow v1.15.0
 
 - fix: Strengthen plan approval flow to prevent premature user approval before plan review
