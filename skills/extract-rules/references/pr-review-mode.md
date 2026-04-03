@@ -96,7 +96,7 @@ Use AI judgment to determine what constitutes "repeated across PRs" based on the
 
 ## Step P5: Append Principles and Patterns
 
-Same as Step C4 in Conversation Extraction Mode:
+Same as Step C5 in Conversation Extraction Mode (see `references/conversation-mode.md`):
 
 1. Categorize each extracted item by language/framework/integration/project
 2. When `split_output: true`: Project-specific patterns go to `.local.md` files

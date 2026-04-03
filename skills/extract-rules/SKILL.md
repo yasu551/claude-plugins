@@ -2,7 +2,7 @@
 name: extract-rules
 description: Extract project-specific coding rules and domain knowledge from existing codebase, generating markdown documentation for AI agents. Use this skill when onboarding a new project, after significant code review discussions about coding style, when coding conventions need to be documented, or when the team's coding patterns should be captured for consistency. Also consider running with --from-conversation after sessions where coding preferences were discussed or corrected, or --from-pr after PRs with significant review feedback.
 model: opus
-allowed-tools: Read, Glob, Grep, Write, Bash(ls *), Bash(mkdir *), Bash(git ls-files *), Bash(wc *), Bash(head *), Bash(tail *), Bash(sort *), Bash(uniq *), Bash(tree *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh api *), Bash(gh auth status *), Bash(gh repo view *)
+allowed-tools: Read, Glob, Grep, Write, Bash(ls *), Bash(mkdir *), Bash(git ls-files *), Bash(wc *), Bash(head *), Bash(tail *), Bash(sort *), Bash(uniq *), Bash(tree *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh api *), Bash(gh auth status *), Bash(gh repo view *), Bash(node *)
 ---
 
 # Extract Rules
@@ -15,7 +15,8 @@ Analyzes existing codebase to identify what Claude would get wrong without proje
 /extract-rules                      # Extract rules from codebase (initial)
 /extract-rules --update             # Re-scan and add new patterns (preserve existing)
 /extract-rules --restructure        # Re-analyze, reorganize structure, merge existing rules
-/extract-rules --from-conversation  # Extract rules from conversation and append
+/extract-rules --from-conversation              # Extract from current session (latest)
+/extract-rules --from-conversation <session-id> # Extract from a specific session
 /extract-rules --from-pr 123                   # カレントリポのPR指定
 /extract-rules --from-pr owner/repo#123        # 他リポのPR指定（URL形式も可）
 /extract-rules --from-pr 100..110              # 範囲指定（カレントリポ）
@@ -130,7 +131,7 @@ Check arguments to determine mode:
 - No arguments → **Full Extraction Mode** (Step 1-7)
 - `--update` → **Update Mode** (Step U1-U6)
 - `--restructure` → **Restructure Mode** (Step R1-R5)
-- `--from-conversation` → **Conversation Extraction Mode** (Step C1-C4)
+- `--from-conversation [session-id]` → **Conversation Extraction Mode** (Step C1-C5)
 - `--from-pr <number|owner/repo#number|range> [...]` → **PR Review Extraction Mode** (Step P1-P5)
 
 ---
@@ -424,64 +425,41 @@ Report structural changes, content merge summary, unmatched rules, and reference
 
 ## Conversation Extraction Mode
 
-When `--from-conversation` is specified, extract rules from the conversation history.
+When `--from-conversation` is specified, extract rules from the full conversation history stored in session `.jsonl` files. The heavy processing (jsonl parsing, analysis, rule writing) is delegated to a subagent to keep the main context clean.
 
-### Step C1: Load Settings and Check Prerequisites
+### Step C1: Prepare and Locate Session File (main agent)
 
 1. Load settings from `extract-rules.local.md` (same as Step 1 in Full Extraction Mode)
 
 2. Check if output directory exists (default: `.claude/rules/`)
    - If not exists: Error "Run /extract-rules first to initialize rule files."
 
-3. Load existing rule files to understand current rules (if `split_output: true`, load `<name>.md`, `<name>.local.md`, and `<name>.examples.md`)
+3. **Locate the session file:**
 
-### Step C2: Analyze Conversation Context
+   1. Get the current working directory (`pwd`)
+   2. Encode the path: replace `/` and `.` with `-` (leading `-` is kept)
+      - Example: `/Users/hiropon/Sources/github.com/myproject` → `-Users-hiropon-Sources-github-com-myproject`
+   3. Session files are stored at: `~/.claude/projects/<encoded-path>/<session-id>.jsonl`
 
-Analyze the current conversation context to identify coding style discussions, preferences, and corrections.
+4. **Select the target session:**
 
-- **User corrections are the highest-value signal** — look for patterns where:
-  - The user rejected Claude's approach and redirected (e.g., "no, we do X instead", "don't use Y here")
-  - The user modified Claude's generated code in a way that reveals a convention
-  - The user explained why a particular approach is preferred in this project
-- Focus on user instructions, code review feedback, and explicit style preferences
-- Note: If context was compacted, history may be limited — extract what is available. Run `--from-conversation` soon after corrections happen, not at the end of a long session, to avoid losing context to compaction.
+   - If a `<session-id>` argument is provided: use `~/.claude/projects/<encoded-path>/<session-id>.jsonl`
+   - If no argument: use the most recently modified `.jsonl` file in the directory (by `ls -t`)
+     - Note: This is a heuristic — if multiple Claude Code instances are running concurrently, the latest file may not be the current session.
+   - Verify the file exists. Inform the user which session file was selected.
 
-### Step C3: Extract Principles and Patterns
+### Step C2: Delegate to Subagent (main agent)
 
-Look for user preferences and classify them (same as Full Extraction Mode):
+Spawn a subagent using the Agent tool. The subagent performs all heavy processing (C3–C5) and returns a summary of what was added. Read `references/conversation-mode.md` for the full subagent instructions (Steps C3–C5).
 
-**1. General best practice feedback** → Skip (do NOT extract):
-   - "Use const" "No magic numbers" "DRY" "Early returns" → General knowledge, AI already knows
-   Only extract if the project/team has made a specific choice beyond general best practices:
-   - "We use FP only, no classes" → Team-specific paradigm choice
+Include in the agent prompt:
+- This skill's absolute directory path (where SKILL.md resides — needed to run bundled scripts)
+- Session file absolute path
+- Output directory path and `split_output` / `language` settings
+- List of existing rule file paths (for deduplication)
+- The subagent instructions from `references/conversation-mode.md`
 
-**2. Project-specific patterns** → Extract with concrete examples:
-   - "Use `RefOrNull<T>` for nullable refs" → Include type definition
-   - "Always use `pathFor()` with `url()`" → Include usage pattern
-
-**3. Code review feedback**: Identify underlying philosophy or specific patterns
-
-Apply the same criteria as Full Extraction Mode (see `references/extraction-criteria.md`).
-
-### Step C4: Append Principles and Patterns
-
-1. Categorize each extracted item:
-   - Language-specific → `languages/<lang>.md`
-   - Framework-specific → `frameworks/<framework>.md`
-   - Integration-specific → `integrations/<framework>-<integration>.md`
-   - Project-level → `project.md`
-
-   **By default** (`split_output: true`): Conversation-extracted **project-specific patterns** always go to `.local.md` files. Principles may be added to shared files. `project.md` is always a single file — project-level items go there regardless of `split_output`. Promoting patterns to shared files should be done manually or via organization-level merge.
-
-2. Check for duplicates: Skip if already exists or covered
-
-3. Append using the same format as Step 6 (see Format guidelines)
-
-4. **Update `.examples.md`**: Follow the common generation procedure in `references/examples-format.md` to add examples for each new rule.
-
-5. Run Security Self-Check (same as Step 6.5) on updated files.
-
-6. Report what was added. See `references/report-templates.md` for format.
+After the subagent completes, report the results to the user.
 
 ---
 
@@ -496,4 +474,4 @@ Read `references/pr-review-mode.md` for the full processing steps (P1-P5). Key f
 3. Fetch review comments from GitHub API (3 endpoints per PR), filter bot comments
 4. Extract principles and patterns (same criteria as `references/extraction-criteria.md`)
 5. **Multiple PRs**: Cross-PR frequency analysis — general best practices that are repeatedly pointed out across different PRs are promoted as organizational emphasis (reframed with specific application context, not just restated)
-6. Append to existing rule files and update `.examples.md` (same as Step C4)
+6. Append to existing rule files and update `.examples.md` (same as Step C5)

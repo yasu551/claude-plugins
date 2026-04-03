@@ -2,6 +2,24 @@
 
 ## 2026-04-03
 
+### extract-rules v1.10.0 / dev-workflow-bundle v1.18.1
+
+- feat: `--from-conversation` mode reads full session history from `.jsonl` files on disk
+  - No longer limited to context window — captures all messages including those lost to compaction
+  - Session file located via encoded project path under `~/.claude/projects/`
+  - Supports `<session-id>` argument to target a specific session (default: latest by mtime)
+- feat: Delegate heavy processing to subagent to keep main context clean
+  - Main agent handles settings + session file resolution (C1-C2)
+  - Subagent handles jsonl parsing, analysis, rule extraction, and file writing (C3-C5)
+  - Subagent instructions moved to `references/conversation-mode.md` (progressive disclosure)
+- feat: Bundle Node.js script `scripts/extract_session_messages.mjs` for jsonl parsing
+  - Filters user/assistant text messages, skips tool_use/thinking blocks
+  - Recovers `AskUserQuestion` responses via interactive tool ID whitelist
+  - Latest-first processing with configurable size limits (100K chars default)
+  - Input validation, malformed JSON line diagnostics
+- refactor: Replace `Bash(python3 *)` with `Bash(node *)` in allowed-tools (node is guaranteed by Claude Code)
+- fix: Update `references/pr-review-mode.md` Step C4 → C5 reference
+
 ### dev-workflow v1.18.0 / dev-workflow-bundle v1.18.0
 
 - feat: Improve init-mode run-tests generation for autonomous test execution
