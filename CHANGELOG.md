@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-04-06
+
+### dev-workflow v1.19.0 / dev-workflow-bundle v1.19.0
+
+- feat(dev-workflow): Add hooks configuration for executing skills/commands at workflow timing points
+  - `hooks.on_complete`: runs after Step 9 (Update Rules), before completion report
+  - Entry format: `Skill(<name>)` for skill invocation, or shell command string
+  - Non-blocking: hook failures are reported as warnings in completion summary
+  - Configured via `dev-workflow.local.md` YAML frontmatter
+- feat(dev-workflow): Add Step 10 (Completion Hooks) to workflow execution
+- feat(dev-workflow --init): Add hooks configuration step to project setup flow
+
 ## 2026-04-04
 
 ### merge-rules v2.0.0 / apply-rules v2.0.0 / extract-rules v1.11.0 / dev-workflow-bundle v1.18.3

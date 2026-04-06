@@ -31,9 +31,12 @@
    d. Set `test_commands: ["Skill(run-tests)"]`
 5. Ask user which reviewer skill to use (default: ask-peer)
    - Options: ask-peer, ask-claude, ask-codex, ask-gemini, ask-copilot
-6. Present detected commands, test approach, prerequisites (if any), review_iterations (default: 3), and reviewer to user for confirmation
-7. On user approval, save `.claude/dev-workflow.local.md` (including reviewer, review_iterations, check_commands, and test_commands) and write generated skill files (if any from 4b/4c)
-8. Verify commands and skills work
+6. Ask user if they want to configure completion hooks (e.g. `Skill(work-complete)`)
+   - If yes: collect entries as a list (`Skill(<name>)` or shell command strings)
+   - If no: omit `hooks` from config
+7. Present detected commands, test approach, prerequisites (if any), review_iterations (default: 3), reviewer, and hooks (if configured) to user for confirmation
+8. On user approval, save `.claude/dev-workflow.local.md` (including reviewer, review_iterations, check_commands, test_commands, and hooks if configured) and write generated skill files (if any from 4b/4c)
+9. Verify commands and skills work
    - Run each check_command and report pass/fail
    - **Pseudo-execute** `run-tests` (newly created skills are not registered in the current session, so `Skill(run-tests)` cannot be used):
      a. Read the generated `.claude/skills/run-tests/SKILL.md`
