@@ -92,6 +92,7 @@ Read `references/init-mode.md` and follow the procedure.
    - Step 9: Update Rules
    - Step 10: Completion Hooks (only if `hooks.on_complete` is configured)
    Mark each item `in_progress` when starting and `completed` when done. Registering all phases upfront gives the user visibility into overall progress and prevents steps from being accidentally dropped. Implementation sub-tasks in Step 5 are additions, not replacements.
+   Note: Unless `-i` / `--iterations` was explicitly specified, Step 2 may reduce N based on task difficulty.
 
 ### Step 2: Create Plan
 
@@ -99,7 +100,12 @@ Read `references/init-mode.md` and follow the procedure.
 2. `EnterPlanMode`
 3. Analyze the task and codebase, create implementation plan. Apply `custom_instructions` to shape plan priorities and structure (must include test plan: what to test, test types, scope, and which existing test files to update or new test files to create — or justification why no tests are needed)
 4. **No code changes in this phase**
-5. Do not present the plan to the user or ask for approval/confirmation — presenting an unreviewed plan wastes user time and risks approval of a suboptimal approach. Immediately proceed to Step 3. The user will see the reviewed plan in Step 4.
+5. **Adjust N by difficulty** (skip if `-i` / `--iterations` was explicitly specified): A typo fix doesn't need 3 rounds of review. Based on the plan just created, assess task difficulty and reduce N to avoid unnecessary iterations — the configured value is a ceiling, not a target:
+   - **Simple** (typo fix, config tweak, straightforward bug fix with obvious solution): N = 1
+   - **Moderate** (multi-file within one module, feature following existing patterns): N = min(2, N)
+   - **Complex** (cross-module, new patterns, API changes, significant refactoring): keep N
+   File count is a hint, not the sole criterion. If adjusted, mark excess TodoWrite iteration items (Step 3-x and Step 8-x) as `completed`. Log the assessed difficulty and effective N.
+6. Do not present the plan to the user or ask for approval/confirmation — presenting an unreviewed plan wastes user time and risks approval of a suboptimal approach. Proceed to Step 3. The user will see the reviewed plan in Step 4.
 
 ### Step 3: Plan Review
 

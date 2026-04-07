@@ -2,6 +2,15 @@
 
 ## 2026-04-07
 
+### dev-workflow v1.21.0 / dev-workflow-bundle v1.21.0
+
+- feat(dev-workflow): Add automatic review iteration adjustment based on task difficulty
+  - Assesses task difficulty (Simple/Moderate/Complex) after plan creation in Step 2
+  - Reduces review iteration count (N) for simpler tasks — configured value acts as ceiling, not target
+  - Simple tasks (typo fix, config tweak): N=1, Moderate (single-module multi-file): N=min(2,N), Complex: keep N
+  - Explicit `-i N` / `--iterations N` CLI flag skips difficulty assessment (user override)
+  - Excess TodoWrite iteration items (Step 3-x, Step 8-x) marked as completed when N is reduced
+
 ### All plugins (patch version bump)
 
 - fix: Isolate plugin source directories to prevent duplicate skill registration
