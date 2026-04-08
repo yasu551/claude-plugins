@@ -18,8 +18,13 @@ allowed-tools: Read, Glob, Grep, Bash(jq *), Bash(for *), Bash(echo *), Bash(if 
 ## 対象ファイル
 
 - `.claude-plugin/marketplace.json` - プラグインマニフェスト
-- `skills/*/` - スキル実体ディレクトリ
-- `plugins/*/` - プラグインsourceディレクトリ
+- `skills/*/` - スキル実体ディレクトリ（SonicGarden 方式のプラグインは直接 source に指定される）
+- `plugins/*/` - ラッパープラグイン（bundle やエージェント依存プラグインで使用）
+
+## プラグイン構造の 2 パターン
+
+1. **direct-skill 方式**: `source: "./skills/<skill-dir>"` + `skills: ["./"]`（単体スキルプラグイン）
+2. **wrapper 方式**: `source: "./plugins/<plugin-name>"`（bundle、エージェント依存プラグイン、フック定義プラグイン）
 
 ## 検証項目
 
@@ -27,18 +32,26 @@ allowed-tools: Read, Glob, Grep, Bash(jq *), Bash(for *), Bash(echo *), Bash(if 
 
 `skills/*/SKILL.md` が存在することを確認。
 
-### 2. プラグインsourceディレクトリの構造確認（plugins/配下）
+### 2. プラグインsourceディレクトリの構造確認
 
-marketplace.json の全プラグインについて:
-- `source` で指定されたディレクトリが存在すること
-- `plugins/<name>/skills/` 配下にスキルへのシンボリックリンクが存在すること
-- シンボリックリンクの参照先（`skills/` 配下の実体）が存在すること
+marketplace.json の各プラグインを `source` プレフィックスで分岐:
+
+**direct-skill 方式（`source: "./skills/..."`）**:
+- `<source>/SKILL.md` が存在すること
+- `skills: ["./"]` が明示されていること
+
+**wrapper 方式（`source: "./plugins/..."`）**:
+- `source` ディレクトリが存在すること
+- `<source>/skills/` がある場合、配下エントリがシンボリックリンクであること、参照先 `skills/<skill>/SKILL.md` が存在すること
+- `<source>/agents/` がある場合、各 `.md` ファイルに YAML frontmatter が存在すること
+- `<source>/.claude-plugin/plugin.json` がある場合、有効な JSON であること
+- bundle の場合（`skills` 配列が specific パスを含む）: `skills` 配列の各パスが `skills/<name>/SKILL.md` に解決されること、かつ `<source>/skills/` 配下の symlink セットと一致すること
 
 ### 3. バージョン整合性
 
 marketplace.json の全プラグインについて:
-- `plugin.json` が存在するプラグイン: marketplace.json と plugin.json のバージョンが一致すること
-- `plugin.json` が存在しないプラグイン: marketplace.json のバージョンのみ確認
+- `<source>/.claude-plugin/plugin.json` が存在する場合（wrapper 方式のみ）: marketplace.json と plugin.json のバージョンが一致すること
+- それ以外: marketplace.json のバージョンのみ確認
 
 ### 4. 構文検証
 
@@ -62,13 +75,22 @@ marketplace.json の全プラグインについて:
 
 ### Step 3: プラグインsourceディレクトリの構造確認
 
-marketplace.json の各プラグインについて:
+marketplace.json の各プラグインについて、`source` プレフィックスで分岐:
+
+**direct-skill 方式（`source: "./skills/..."`）**:
+
+1. `<source>/SKILL.md` が存在すること
+2. `skills: ["./"]` が明示されていること
+
+**wrapper 方式（`source: "./plugins/..."`）**:
+
 1. `source` ディレクトリが存在すること
-2. `plugins/<name>/skills/` 配下のエントリがシンボリックリンクであること
-3. シンボリックリンクの参照先が存在し、SKILL.md を含むこと
+2. `<source>/skills/` がある場合、配下エントリがシンボリックリンクであり、参照先 `skills/<skill>/SKILL.md` が存在すること
+3. `<source>/agents/` がある場合、各 `.md` に YAML frontmatter が存在すること
+4. **bundle の場合** (`skills` 配列が specific パスを含む): 配列内の各パスが `skills/<name>/SKILL.md` に解決されること、かつ `<source>/skills/` 配下の symlink セットと `skills` 配列のセットが一致すること（どちらか一方にしかないエントリを検出）
 
 ```bash
-# シンボリックリンク確認例
+# wrapper 方式のシンボリックリンク確認例
 ls -la plugins/<name>/skills/
 readlink plugins/<name>/skills/<skill-name>
 test -f plugins/<name>/skills/<skill-name>/SKILL.md
@@ -77,8 +99,9 @@ test -f plugins/<name>/skills/<skill-name>/SKILL.md
 ### Step 4: バージョン整合性チェック
 
 marketplace.json の全プラグインについて:
+
 1. marketplace.json のバージョンを取得
-2. `plugins/<name>/.claude-plugin/plugin.json` が存在する場合、そのバージョンを取得し一致を確認
+2. `<source>/.claude-plugin/plugin.json` が存在する場合（wrapper 方式のみ）、そのバージョンを取得し一致を確認
 
 不一致がある場合は警告として記録してください。
 
@@ -136,11 +159,18 @@ Skill(skill: "check-cli-updates")
 | ask-claude | ✅ | ✅ |
 | ... | ... | ... |
 
-### プラグインsourceディレクトリ
-| プラグイン | source存在 | skills/シンボリックリンク | 参照先存在 | 状態 |
-|-----------|-----------|----------------------|----------|------|
+### direct-skill プラグイン (`source: "./skills/..."`)
+| プラグイン | source存在 | skills: ["./"] | SKILL.md存在 | 状態 |
+|-----------|-----------|----------------|--------------|------|
 | ask-claude | ✅ | ✅ | ✅ | ✅ |
 | ... | ... | ... | ... | ... |
+
+### wrapper プラグイン (`source: "./plugins/..."`)
+| プラグイン | source存在 | skillsシンボリックリンク | 参照先存在 | bundle skills配列整合 | 状態 |
+|-----------|-----------|----------------------|----------|---------------------|------|
+| translate | ✅ | ✅ | ✅ | N/A | ✅ |
+| caffeinate | ✅ | ✅ | ✅ | N/A | ✅ |
+| dev-workflow-bundle | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### バージョン整合性
 | プラグイン | marketplace | plugin.json | 状態 |

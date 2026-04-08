@@ -8,7 +8,8 @@
     {
       "name": "ask-claude",
       "description": "Get a second opinion from another Claude instance",
-      "source": "./plugins/ask-claude",
+      "source": "./skills/ask-claude",
+      "skills": ["./"],
       "version": "1.1.3",
       "author": {
         "name": "hiropon"
@@ -18,7 +19,8 @@
     {
       "name": "ask-codex",
       "description": "Get a second opinion from OpenAI Codex",
-      "source": "./plugins/ask-codex",
+      "source": "./skills/ask-codex",
+      "skills": ["./"],
       "version": "1.2.1",
       "author": {
         "name": "hiropon"
@@ -28,7 +30,8 @@
     {
       "name": "ask-gemini",
       "description": "Get a second opinion from Google Gemini",
-      "source": "./plugins/ask-gemini",
+      "source": "./skills/ask-gemini",
+      "skills": ["./"],
       "version": "1.2.1",
       "author": {
         "name": "hiropon"
@@ -38,7 +41,8 @@
     {
       "name": "ask-copilot",
       "description": "Get a second opinion from GitHub Copilot",
-      "source": "./plugins/ask-copilot",
+      "source": "./skills/ask-copilot",
+      "skills": ["./"],
       "version": "1.0.3",
       "author": {
         "name": "hiropon"
@@ -48,7 +52,8 @@
     {
       "name": "security-scanner",
       "description": "Scan plugins and skills for security risks (multi-agent support)",
-      "source": "./plugins/security-scanner",
+      "source": "./skills/security-scanner",
+      "skills": ["./"],
       "version": "1.2.2",
       "author": {
         "name": "hiropon"
@@ -58,7 +63,8 @@
     {
       "name": "extract-rules",
       "description": "Extract project-specific coding rules from codebase for AI agents",
-      "source": "./plugins/extract-rules",
+      "source": "./skills/extract-rules",
+      "skills": ["./"],
       "version": "1.11.1",
       "author": {
         "name": "hiropon"
@@ -68,7 +74,8 @@
     {
       "name": "merge-rules",
       "description": "Merge portable coding rules from multiple projects into a unified rule set",
-      "source": "./plugins/merge-rules",
+      "source": "./skills/merge-rules",
+      "skills": ["./"],
       "version": "2.0.1",
       "author": {
         "name": "hiropon"
@@ -88,7 +95,8 @@
     {
       "name": "peer",
       "description": "Peer engineer for code review, planning, and brainstorming",
-      "source": "./plugins/peer",
+      "source": "./skills/ask-peer",
+      "skills": ["./"],
       "version": "2.2.1",
       "author": {
         "name": "hiropon"
@@ -108,7 +116,8 @@
     {
       "name": "dev-workflow",
       "description": "Guided development workflow: plan → review → implement → check/test → code review → rules update",
-      "source": "./plugins/dev-workflow",
+      "source": "./skills/dev-workflow",
+      "skills": ["./"],
       "version": "1.21.0",
       "author": {
         "name": "hiropon"
@@ -119,6 +128,7 @@
       "name": "dev-workflow-bundle",
       "description": "Development workflow bundle (includes peer + extract-rules + dev-workflow + rules-review)",
       "source": "./plugins/dev-workflow-bundle",
+      "skills": ["./skills/ask-peer", "./skills/dev-workflow", "./skills/extract-rules", "./skills/rules-review"],
       "version": "1.21.0",
       "author": {
         "name": "hiropon"
@@ -128,7 +138,8 @@
     {
       "name": "apply-rules",
       "description": "Apply organization-wide rules to projects (filter by tech stack, merge with existing rules)",
-      "source": "./plugins/apply-rules",
+      "source": "./skills/apply-rules",
+      "skills": ["./"],
       "version": "2.0.1",
       "author": {
         "name": "hiropon"
@@ -138,7 +149,8 @@
     {
       "name": "rules-review",
       "description": "Check code changes for .claude/rules/ compliance using parallel sub-agent review",
-      "source": "./plugins/rules-review",
+      "source": "./skills/rules-review",
+      "skills": ["./"],
       "version": "1.0.1",
       "author": {
         "name": "hiropon"

@@ -194,7 +194,7 @@ Parse the GitHub URL to extract owner, repo, branch, path, and determine scan ty
 
 **Examples**:
 - `https://github.com/hiroro-work/claude-plugins` → Directory scan, branch="", path=""
-- `https://github.com/hiroro-work/claude-plugins/tree/main/plugins/ask-claude` → Directory scan (plugin), branch="main", path="plugins/ask-claude"
+- `https://github.com/hiroro-work/claude-plugins/tree/main/skills/ask-claude` → Directory scan (skill), branch="main", path="skills/ask-claude"
 - `https://github.com/hiroro-work/claude-plugins/tree/main/.claude/skills/my-skill` → Directory scan (skill), branch="main", path=".claude/skills/my-skill"
 - `https://github.com/owner/repo/blob/main/skills/my-skill/SKILL.md` → Single file scan, branch="main"
 

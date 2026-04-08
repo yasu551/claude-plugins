@@ -23,22 +23,20 @@ This project is a Claude Code plugins marketplace. "Tests" here means verifying 
 >
 > ### Checks
 >
-> 1. **Load marketplace manifest**: Read `.claude-plugin/marketplace.json`. Extract the `plugins` array. For each plugin, capture `name`, `source`, and `version`.
+> 1. **Load marketplace manifest**: Read `.claude-plugin/marketplace.json`. Extract the `plugins` array. For each plugin, capture `name`, `source`, `skills` (optional), and `version`.
 >
-> 2. **Skill entity existence**: For each `skills/*/` directory referenced by plugins (via symlinks under `plugins/<name>/skills/<skill>`), confirm the target directory exists and contains `SKILL.md`.
+> 2. **Skill entity existence**: Verify each `skills/*/` directory contains `SKILL.md`.
 >
-> 3. **Plugin source directory structure**: For each plugin in marketplace.json:
->    - `source` directory exists (e.g. `plugins/<name>`)
->    - `plugins/<name>/skills/` entries are symlinks (use `readlink`)
->    - Symlink targets resolve to existing `skills/<skill>/SKILL.md`
+> 3. **Plugin source directory structure**: For each plugin in marketplace.json, dispatch by `source` prefix:
+>    - **If `source` starts with `./skills/`** (direct-skill plugin): verify `<source>/SKILL.md` exists and `skills: ["./"]` is present
+>    - **If `source` starts with `./plugins/`** (wrapper plugin): verify `<source>/` exists; if `<source>/skills/` exists, each entry under it must be a symlink (use `readlink`) resolving to an existing `skills/<skill>/SKILL.md`; if `<source>/agents/` exists, each `.md` file must have YAML frontmatter; if `<source>/.claude-plugin/plugin.json` exists, its JSON must be valid
+>    - **Additionally, for wrapper bundles** (wrapper plugin with `skills` array of specific paths like `./skills/<name>`): verify each path in `skills` array resolves to an existing `skills/<name>/SKILL.md`, AND verify the set of paths matches the set of symlinks under `<source>/skills/` (each symlink has a corresponding `skills` entry, and vice versa — detect drift in either direction)
 >
-> 4. **Version consistency**: For each plugin:
->    - If `plugins/<name>/.claude-plugin/plugin.json` exists, verify its `version` matches marketplace.json
->    - If not, only marketplace.json version is checked
+> 4. **Version consistency**: For each plugin, if `<source>/.claude-plugin/plugin.json` exists (only possible for `./plugins/` sources), verify its `version` matches marketplace.json.
 >
-> 5. **JSON syntax**: Validate every `.claude-plugin/marketplace.json` and `plugins/*/.claude-plugin/plugin.json` with `jq empty`.
+> 5. **JSON syntax**: Validate `.claude-plugin/marketplace.json` and every `plugins/*/.claude-plugin/plugin.json` with `jq empty`.
 >
-> 6. **Frontmatter presence**: Verify each `SKILL.md` and each agent file (`plugins/*/agents/*.md`) starts with `---` on the first line (YAML frontmatter).
+> 6. **Frontmatter presence**: Verify each `skills/*/SKILL.md` and each agent file (`plugins/*/agents/*.md`) starts with `---` on the first line (YAML frontmatter).
 >
 > ### Return Format
 >

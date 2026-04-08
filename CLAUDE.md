@@ -4,22 +4,28 @@ Claude Code用プラグインを公開するためのマーケットプレイス
 
 ## リポジトリ構成
 
-```
+プラグインには 2 つの配置パターンがある:
+
+1. **direct-skill 方式**: 単体スキルプラグインはスキルディレクトリを直接 source にする（`source: "./skills/<skill-dir>"` + `skills: ["./"]`）。`plugins/` 配下のラッパーは不要
+2. **wrapper 方式**: エージェント依存プラグイン、フック定義プラグイン、複数スキルの bundle は `plugins/<plugin-name>/` 配下にまとめる
+
+```text
 .
 ├── .claude-plugin/
 │   └── marketplace.json      # プラグインマニフェスト
-├── skills/                   # SKILL.mdの実体（正規ファイル）
+├── skills/                   # SKILL.mdの実体かつ単体スキルプラグインのsource
 │   └── <skill-name>/
-│       └── SKILL.md
-├── plugins/                  # 全プラグインのsourceディレクトリ
+│       ├── SKILL.md
+│       └── README.md         # (任意、ユーザー向け設定リファレンスなど)
+├── plugins/                  # wrapper 方式のプラグインのみ
 │   └── <plugin-name>/
-│       ├── skills/
-│       │   └── <skill-name>  # → ../../../skills/<skill-name> (シンボリックリンク)
-│       ├── .claude-plugin/   # (エージェント依存プラグインのみ)
+│       ├── skills/           # bundle の場合、複数 skill への symlink
+│       │   └── <skill-name>  # → ../../../skills/<skill-name>
+│       ├── .claude-plugin/   # (エージェント依存 / フック定義プラグイン)
 │       │   └── plugin.json
 │       ├── agents/           # (エージェント依存プラグインのみ)
 │       │   └── <agent-name>.md
-│       └── README.md         # (エージェント依存プラグインのみ)
+│       └── README.md         # (任意)
 ├── .claude/
 │   ├── commands/             # 開発用コマンド
 │   ├── skills/               # 開発・テスト用シンボリックリンク
@@ -28,17 +34,18 @@ Claude Code用プラグインを公開するためのマーケットプレイス
 └── README.md                 # リポジトリ説明
 ```
 
-**注意:** 各プラグインは `plugins/` 配下に専用のsourceディレクトリを持つ必要がある。`source: "./"` を使うと、`skills/` 配下の全スキルが自動発見されて重複登録される。
+**注意:** marketplace.json で `source: "./"` を使ってはいけない。`skills/` 配下の全スキルが自動発見されて重複登録される（[anthropics/claude-code#13344](https://github.com/anthropics/claude-code/issues/13344)）。必ず `./skills/<skill-dir>` または `./plugins/<plugin-name>` のように specific なパスを指定する。
 
-## スキル追加フロー（エージェント非依存）
+## スキル追加フロー（direct-skill 方式 / エージェント非依存）
 
-スキルが `allowed-tools` を持ち、エージェントに依存しない場合:
+スキルが `allowed-tools` を持ち、エージェント / フック定義に依存しない場合。`plugins/` 配下のラッパーは作らない。
 
-### 1. skills/ディレクトリにスキル作成
+### 1. skills/ ディレクトリにスキル作成
 
-```
+```text
 skills/<skill-name>/
-└── SKILL.md
+├── SKILL.md
+└── README.md   # (任意、設定が複雑ならユーザー向けリファレンスを追加)
 ```
 
 ### 2. SKILL.md
@@ -55,21 +62,15 @@ allowed-tools: Read, Glob, Grep
 スキルの詳細な説明と使い方
 ```
 
-### 3. プラグインのsourceディレクトリ作成
+### 3. marketplace.json に追加
 
-```bash
-mkdir -p plugins/<plugin-name>/skills
-ln -s ../../../skills/<skill-name> plugins/<plugin-name>/skills/<skill-name>
-```
-
-### 4. marketplace.json に追加
-
-`.claude-plugin/marketplace.json` の `plugins` 配列に追加:
+`.claude-plugin/marketplace.json` の `plugins` 配列に追加（プラグイン名とスキル名が異なっても OK、例: plugin `peer` → skill `ask-peer`）:
 
 ```json
 {
   "name": "<plugin-name>",
-  "source": "./plugins/<plugin-name>",
+  "source": "./skills/<skill-name>",
+  "skills": ["./"],
   "description": "スキルの説明",
   "version": "1.0.0",
   "author": { "name": "hiropon" },
@@ -77,21 +78,28 @@ ln -s ../../../skills/<skill-name> plugins/<plugin-name>/skills/<skill-name>
 }
 ```
 
-### 5. 開発・テスト用シンボリックリンク作成
+### 4. 開発・テスト用シンボリックリンク作成
 
 ```bash
 ln -s ../../skills/<skill-name> .claude/skills/<skill-name>
 ```
 
-### 6. CHANGELOG.md 更新
+### 5. CHANGELOG.md 更新
 
-## プラグイン追加フロー（エージェント依存）
+## プラグイン追加フロー（wrapper 方式）
 
-エージェントを必要とするプラグインの場合:
+wrapper には **2 つのサブパターン** がある。必要なファイル構成が異なるので混同しないこと:
 
-### 1. skills/ディレクトリにスキル作成＋プラグインディレクトリ作成
+| サブパターン | 用途 | `.claude-plugin/plugin.json` | `agents/` | `skills/` |
+|---|---|---|---|---|
+| **A. エージェント / フック wrapper** | エージェント依存 (`translate`)、フック定義 (`caffeinate`) | 必須 | エージェント依存なら必須 | 単一スキル symlink |
+| **B. bundle wrapper** | 複数スキルの束 (`dev-workflow-bundle`) | 不要 | 不要 | 複数スキルの symlink + marketplace.json の `skills` 配列 |
 
-```
+### サブパターン A: エージェント / フック wrapper
+
+#### A-1. skills/ ディレクトリにスキル作成＋プラグインディレクトリ作成
+
+```text
 skills/<skill-name>/
 └── SKILL.md
 
@@ -100,20 +108,18 @@ plugins/<plugin-name>/
 │   └── plugin.json
 ├── skills/
 │   └── <skill-name>  # → ../../../skills/<skill-name> (シンボリックリンク)
-├── agents/
+├── agents/            # エージェント依存プラグインのみ
 │   └── <agent-name>.md
 └── README.md
 ```
 
 ```bash
-# スキル実体は skills/ に配置
 mkdir -p skills/<skill-name>
-# プラグインディレクトリからシンボリックリンク
 mkdir -p plugins/<plugin-name>/skills
 ln -s ../../../skills/<skill-name> plugins/<plugin-name>/skills/<skill-name>
 ```
 
-### 2. plugin.json
+#### A-2. plugin.json
 
 ```json
 {
@@ -131,9 +137,9 @@ ln -s ../../../skills/<skill-name> plugins/<plugin-name>/skills/<skill-name>
 }
 ```
 
-### 3. marketplace.json に追加
+フック定義が必要な場合は `plugin.json` の `hooks` フィールドで指定（例は `plugins/caffeinate/.claude-plugin/plugin.json` を参照）。
 
-`.claude-plugin/marketplace.json` の `plugins` 配列に追加:
+#### A-3. marketplace.json に追加
 
 ```json
 {
@@ -146,17 +152,51 @@ ln -s ../../../skills/<skill-name> plugins/<plugin-name>/skills/<skill-name>
 }
 ```
 
-### 4. 開発・テスト用シンボリックリンク作成
+### サブパターン B: bundle wrapper
+
+#### B-1. プラグインディレクトリ作成（plugin.json は不要）
+
+```text
+plugins/<bundle-name>/
+└── skills/
+    ├── <skill-a>  # → ../../../skills/<skill-a>
+    ├── <skill-b>  # → ../../../skills/<skill-b>
+    └── ...
+```
+
+```bash
+mkdir -p plugins/<bundle-name>/skills
+ln -s ../../../skills/<skill-a> plugins/<bundle-name>/skills/<skill-a>
+ln -s ../../../skills/<skill-b> plugins/<bundle-name>/skills/<skill-b>
+```
+
+#### B-2. marketplace.json に追加（`skills` 配列を明示）
+
+```json
+{
+  "name": "<bundle-name>",
+  "source": "./plugins/<bundle-name>",
+  "skills": ["./skills/<skill-a>", "./skills/<skill-b>"],
+  "description": "bundle の説明",
+  "version": "1.0.0",
+  "author": { "name": "hiropon" },
+  "category": "workflow"
+}
+```
+
+`skills` 配列と `plugins/<bundle-name>/skills/` 配下の symlink セットは **必ず一致** させること（`/verify-plugins` と `run-tests` が整合性を検証する）。
+
+### wrapper 共通: 開発・テスト用シンボリックリンク作成
 
 ```bash
 # スキル
 ln -s ../../skills/<skill-name> .claude/skills/<skill-name>
 
-# エージェント
+# エージェント（サブパターン A のみ）
 ln -s ../../plugins/<plugin-name>/agents/<agent-name>.md .claude/agents/<agent-name>.md
 ```
 
-### 5. CHANGELOG.md 更新
+### wrapper 共通: CHANGELOG.md 更新
 
 ## 検証コマンド
 
