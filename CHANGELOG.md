@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-04-09
+
+### dev-workflow v1.22.0 / dev-workflow-bundle v1.22.0
+
+- feat(dev-workflow): Add task decomposition for splitting large tasks into PR-sized subtasks
+  - New **Step 1.5: Task Decomposition** runs between Step 1 (Load Settings) and Step 2 (Create Plan)
+  - In Normal sub-mode, the workflow lightweightly judges whether the request should be split and proposes a decomposition to the user for approval. Simple, single-concern tasks pass through unchanged
+  - Approved decompositions are persisted to `.claude/plans/dev-workflow.<slug>.md` — one state file per parent task, so multiple parent tasks can proceed in parallel
+  - Each subtask runs through the existing Step 2–10 flow as an independent PR-sized unit
+  - New `--resume <state-file>` flag picks up the next runnable subtask in a fresh session. Accepts full path, filename, or bare slug
+  - On subtask completion, the workflow instructs the user to commit + open a PR before resuming the next subtask. The workflow itself never stages, commits, or pushes
+  - Parent-task progress is surfaced as a TodoWrite top-level row (`Parent task: N/TOTAL subtasks done — <slug>`)
+  - Edge cases handled: YAML parse errors on state files, `depends_on` cycles, missing `--resume` targets, and leftover `in_progress` subtasks from interrupted sessions
+  - Step 1.5 is intentionally separate from Plan Mode (which is still reserved for Step 2) so the decomposition proposal is a plain yes/no dialogue
+
 ## 2026-04-07
 
 ### dev-workflow v1.21.0 / dev-workflow-bundle v1.21.0
