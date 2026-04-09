@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-04-10
+
+### dev-workflow v1.23.0 / dev-workflow-bundle v1.23.0
+
+- feat(dev-workflow): Add `task_decomposition` setting to disable auto-decomposition in Normal sub-mode
+  - Default `true` — existing behavior unchanged
+  - Set to `false` to skip Step 1.5's auto-decomposition check entirely — Normal sub-mode requests (`/dev-workflow <task>`) are treated as single tasks. Step 1.5 is omitted from TodoWrite in this mode
+  - `--resume <state-file>` is unaffected — existing state files can still be resumed explicitly
+  - Non-boolean values fall back to `true` with a warning
+- docs(dev-workflow): Refactor SKILL.md for skill-creator best practices
+  - Step 1.5 Task Decomposition detail extracted to `references/task-decomposition.md` — SKILL.md drops from 306 to 254 lines (~17% reduction), and simple single-concern runs no longer load state-file semantics they don't need (progressive disclosure)
+  - Step 3 / Step 8 `MUST continue re-review` reframed with the *why* (plan modifications often introduce fresh ripple effects; code fixes routinely introduce new bugs) so the instruction persuades instead of insisting
+  - No runtime behavior change — all semantics preserved, just documented differently
+
 ## 2026-04-09
 
 ### dev-workflow v1.22.0 / dev-workflow-bundle v1.22.0

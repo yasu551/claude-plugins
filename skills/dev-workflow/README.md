@@ -66,6 +66,7 @@ Settings files consist of **YAML frontmatter only** (no body required).
 | --- | --- | --- | --- |
 | `reviewer` | string | `ask-peer` | Reviewer skill name |
 | `review_iterations` | int | `3` | Max iterations for Plan / Code Review |
+| `task_decomposition` | bool | `true` | Whether Step 1.5 runs auto-decomposition in Normal sub-mode |
 | `custom_instructions` | string | (none) | Free-form instructions applied across all phases |
 | `check_commands` | list&lt;string&gt; | (none) | Static checks (lint / format / typecheck, etc.) |
 | `test_commands` | list&lt;string&gt; | `["Skill(run-tests)"]` | Test execution (fixed) |
@@ -98,6 +99,21 @@ Automatic adjustment by task difficulty (evaluated in Step 2):
 | Complex | Cross-module, new patterns, API changes, significant refactoring | Keep configured value |
 
 If `-i N` is explicitly specified, auto-adjustment is skipped. The configured value is a **ceiling**, not a target.
+
+#### `task_decomposition`
+
+Controls whether Step 1.5 runs the auto-decomposition check in Normal sub-mode.
+
+- `true` (default): the current behavior — large, multi-concern tasks get a decomposition proposal presented to the user
+- `false`: Step 1.5 is omitted from TodoWrite and the decomposition judgment is skipped entirely. Normal sub-mode requests (`/dev-workflow <task>`) go straight to Step 2 as a single task
+
+```yaml
+task_decomposition: false
+```
+
+`--resume <state-file>` is **not affected** by this setting. An existing state file can still be resumed explicitly at any time — the flag only controls the automatic judgment in Normal sub-mode. Typical use cases for `false`: projects where tasks are consistently small-scoped, or users who prefer to decompose tasks manually and find the proposal dialogue distracting.
+
+Non-boolean values are ignored with a warning and fall back to `true`.
 
 #### `custom_instructions`
 
@@ -163,6 +179,7 @@ test_commands:
 ---
 reviewer: "ask-codex"
 review_iterations: 3
+task_decomposition: true
 custom_instructions: "Always use TDD. Write tests before implementation. Prefer functional style."
 check_commands:
   - "pnpm run lint:fix"
@@ -180,9 +197,11 @@ hooks:
 
 Large requests that span multiple independent concerns can be split into subtasks (each delivered as its own PR), and resumed across sessions.
 
+> **Disabling the auto check**: Set `task_decomposition: false` in your settings file to skip the Step 1.5 judgment entirely. Tasks are always treated as single-task runs, and Step 1.5 is omitted from TodoWrite. `--resume <state-file>` still works on existing state files.
+
 ### How it works
 
-1. `/dev-workflow <task>` runs a lightweight decomposition check in Step 1.5
+1. `/dev-workflow <task>` runs a lightweight decomposition check in Step 1.5 (only when `task_decomposition` is `true`, the default)
    - Simple, single-concern tasks continue as a single task (no state file created)
    - Tasks with multiple independent concerns get a decomposition proposal presented to the user
 2. The user approves, adjusts, or rejects the proposal
@@ -284,7 +303,7 @@ The workflow begins at Step 2 (Step 1 is settings load, Step 1.5 is task decompo
 | Step | Name | Content |
 | --- | --- | --- |
 | 1 | Load Settings | Load config, resolve iteration count, register TodoWrite |
-| 1.5 | Task Decomposition | (Normal sub-mode) Decide whether to split the task into subtasks and, if approved, create a state file. (Resume sub-mode) Load the state file and pick the next subtask — the step is executed but not registered as a TodoWrite entry |
+| 1.5 | Task Decomposition | (Normal sub-mode, only when `task_decomposition: true`) Decide whether to split the task into subtasks and, if approved, create a state file. (Resume sub-mode) Load the state file and pick the next subtask — the step is executed but not registered as a TodoWrite entry. Skipped entirely when `task_decomposition: false` |
 | 2 | Create Plan | Create plan in Plan Mode, assess difficulty |
 | 3 | Plan Review | Internal review by reviewer (up to N iterations) |
 | 4 | Finalize Plan | **User approval gate** |
@@ -311,6 +330,7 @@ To get the full benefit of dev-workflow, the following skills are recommended:
 | Settings file does not exist | Prompts to run `--init` and stops |
 | `reviewer` unset or unsupported value | Falls back to `ask-peer` |
 | `review_iterations` is not a positive integer | Uses default `3` |
+| `task_decomposition` is not a boolean | Warns and falls back to `true` |
 | `custom_instructions` is not a string | Warns and ignores |
 | `hooks.on_complete` has invalid format | Warns and ignores |
 | `check_commands` failure | Fix and retry (up to 3 times); if still failing, reports to user and stops |
