@@ -2,6 +2,12 @@
 
 ## 2026-04-10
 
+### dev-workflow v1.25.0 / dev-workflow-bundle v1.25.0
+
+- refactor(dev-workflow): Remove completion hooks prompt from `--init`
+  - `--init` no longer asks about hooks — hooks are left unconfigured by default
+  - Users can still configure `hooks.on_complete` manually in settings files (execution mode Step 10 unchanged)
+
 ### dev-workflow v1.24.0 / dev-workflow-bundle v1.24.0
 
 - feat(dev-workflow): Add 3-layer configuration with type-aware merge

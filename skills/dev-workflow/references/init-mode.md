@@ -31,12 +31,9 @@
    d. Set `test_commands: ["Skill(run-tests)"]`
 5. Ask user which reviewer skill to use (default: ask-peer)
    - Options: ask-peer, ask-claude, ask-codex, ask-gemini, ask-copilot
-6. Ask user if they want to configure completion hooks (e.g. `Skill(work-complete)`)
-   - If yes: collect entries as a list (`Skill(<name>)` or shell command strings)
-   - If no: omit `hooks` from config
-7. Present detected commands, test approach, prerequisites (if any), review_iterations (default: 3), reviewer, and hooks (if configured) to user for confirmation
-8. On user approval, save settings to `.claude/dev-workflow.md` (project shared, git tracked). If `.claude/dev-workflow.md` already exists, preserve any keys not managed by `--init` (e.g., `task_decomposition`, `custom_instructions`) by reading the existing file first and merging the new values into it. If the existing file has malformed YAML, warn the user and ask whether to overwrite it (losing unmanaged keys) or abort so they can fix it manually. Write generated skill files (if any from 4b/4c)
-9. Verify commands and skills work
+6. Present detected commands, test approach, prerequisites (if any), review_iterations (default: 3), and reviewer to user for confirmation
+7. On user approval, save settings to `.claude/dev-workflow.md` (project shared, git tracked). If `.claude/dev-workflow.md` already exists, preserve any keys not managed by `--init` (e.g., `task_decomposition`, `custom_instructions`, `hooks`) by reading the existing file first and merging the new values into it. If the existing file has malformed YAML, warn the user and ask whether to overwrite it (losing unmanaged keys) or abort so they can fix it manually. Write generated skill files (if any from 4b/4c)
+8. Verify commands and skills work
    - Run each check_command and report pass/fail
    - **Pseudo-execute** `run-tests` (newly created skills are not registered in the current session, so `Skill(run-tests)` cannot be used):
      a. Read the generated `.claude/skills/run-tests/SKILL.md`
