@@ -62,6 +62,7 @@ Use the `Agent` tool (`subagent_type: general-purpose`). Embed the following in 
 - **Session file**: the absolute path resolved in §1.4
 - **Reference file**: the absolute path of this file, so the subagent can read §2 and §3 as its authoritative working spec
 - **Repo root**: absolute `pwd`, to help recognize project-local identifiers during sanitization
+- **Language**: the language code resolved at SKILL.md Step 1 Load Settings (e.g. `ja`, `en`). Unknown codes are passed through — the subagent produces best-effort output.
 
 Instruct the subagent to:
 
@@ -69,7 +70,8 @@ Instruct the subagent to:
 2. Parse the session jsonl (line-delimited JSON — each line one message). Extract `user` and `assistant` text content. Skip `tool_use`, `thinking`, and similar internal blocks. A short `jq` or inline node/python is fine.
 3. Scan for the signal types in §2.2.
 4. Apply §3 sanitization to each candidate's `description` and `suggested fix direction` **before** returning.
-5. Return only the sanitized candidate list plus a finding count. Use this exact Markdown shape so main can reassemble the submission body without guesswork — one section per candidate, then a trailing count line:
+5. **Language handling**: write the `Description` and `Suggested fix direction` paragraphs in the provided language. All other tokens — `### Finding <N>` headings, `**Target skill:**` / `**Category:**` / `**Description:**` / `**Suggested fix direction:**` label names, the enum values for Target skill and Category, the trailing `Findings: <N>` line, and the `Status: ERROR` shape — remain English exactly as shown. Sanitization (§3) applies to the localized prose regardless of language.
+6. Return only the sanitized candidate list plus a finding count. Use this exact Markdown shape so main can reassemble the submission body without guesswork — one section per candidate, then a trailing count line:
 
    ```markdown
    ### Finding 1
@@ -86,7 +88,7 @@ Instruct the subagent to:
 
    Do not return raw conversation excerpts, pre-sanitization text, or credential-like literals.
 
-6. **Error return contract.** If anything goes wrong — reference file read failure, jsonl parse failure (the file is unreadable or malformed so no content can be extracted), unexpected tool error — do NOT return freeform prose or a partial success shape. Return this exact fixed shape and nothing else:
+7. **Error return contract.** If anything goes wrong — reference file read failure, jsonl parse failure (the file is unreadable or malformed so no content can be extracted), unexpected tool error — do NOT return freeform prose or a partial success shape. Return this exact fixed shape and nothing else:
 
    ```text
    Status: ERROR
@@ -233,12 +235,14 @@ Extraction-time errors (during §2):
 - **Subagent failure** — main rejects the return and aborts Step 9.5 when **any** of the conditions below hit. The conditions split into two tiers with different natures.
 
   *Machine-checkable rejections* (purely structural — can be evaluated with string / regex matching):
-  - Return begins with `Status: ERROR` (subagent reported its own failure per §2.1 step 6)
+  - Return begins with `Status: ERROR` (subagent reported its own failure per §2.1 Error return contract)
   - Subagent crashed or produced no output
   - The trailing `Findings: <N>` line is missing, or `<N>` disagrees with the count of `### Finding` headings
   - A `Target skill` value is not one of `dev-workflow`, `ask-peer`, `extract-rules`, `rules-review`
   - A `Category` value is not one of `ambiguity`, `missing-branch`, `wrong-default`, `rules-conflict`, `other`
   - The return contains top-level sections other than `### Finding <N>` (and the trailing `Findings:` line)
+
+  **Contract note — do not relax for i18n**: these rejections all key on English schema tokens (`Status: ERROR`, `### Finding <N>`, `Target skill` / `Category` label + enum values, `Findings: <N>`). §2.1 Language handling pins those tokens to English regardless of the configured output language precisely so this check stays string/enum-match. A future change that "relaxes" the checks to accept translated tokens breaks the contract between main and the subagent and should be rejected.
 
   *Heuristic spot-check* (main applies judgment — not purely mechanical):
   - Obvious sanitization violations: raw conversation excerpts, absolute paths, credential-like literals, or project-specific identifiers from §3 that clearly slipped through. Flag the obvious cases; do not attempt exhaustive detection (the §4 user preview is the final catch-all for subtle misses)
