@@ -4,11 +4,11 @@
 
 ### dev-workflow v1.33.0 / dev-workflow-bundle v1.33.0
 
-- feat(dev-workflow): Add configurable output language for Step 9.5 self-retrospective prose
+- feat(dev-workflow): Add configurable output language for Step 9.5 finding prose
   - New top-level scalar config key `language` (e.g. `ja`, `en`), merged across the three settings layers like other scalars. Resolution: merged skill config → `~/.claude/settings.json` `language` field → default `ja`. `null` / empty string / non-string values fall through to the next step. Reading `~/.claude/settings.json` warns only on malformed JSON or an invalid `language` value; a missing file or missing key silently falls through to `ja`
-  - Scope: only Step 9.5 (self-retrospective) body prose (`Description`, `Suggested fix direction`) and its terminal-summary prose honor the setting. Other workflow steps stay English regardless
-  - Step 9.5 threads the resolved language into `references/self-retrospective.md` §1 pre-flight (new item 5), §2.1 subagent prompt (new `Language` input + new "Language handling" instruction step), §3 sanitization (sanitization rules apply regardless of output language), and §4 terminal summary (prose in the resolved language; `<submitted|skipped|failed>` status token stays English)
-  - §5 Machine-checkable rejection contract pinned to English: `Status: ERROR`, `### Finding <N>`, `Target skill` / `Category` label + enum values, and `Findings: <N>` remain English so string/enum matching stays load-bearing. Added a **Contract note — do not relax for i18n** so a future editor doesn't "fix" §5 to accept translated tokens and silently break the main ↔ subagent contract
+  - Scope: only the `Description` / `Suggested fix direction` paragraphs of Step 9.5 findings honor the setting. Everything else — schema tokens (`### Finding <N>`, labels, enum values, `Findings: <N>`, `Status: ERROR`), terminal summary, destination header — stays English regardless of the setting
+  - Step 9.5 threads the resolved language into `references/self-retrospective.md` §2.1 subagent prompt (new `Language` input + new "Language handling" instruction step). §3 sanitization applies to the localized prose regardless of language
+  - §5 Machine-checkable rejection contract pinned to English so string/enum matching stays load-bearing. Added a **Contract note — do not relax for i18n** to prevent future editors from "fixing" §5 to accept translated tokens and silently break the main ↔ subagent contract
 
 ### dev-workflow v1.32.1 / dev-workflow-bundle v1.32.1
 
