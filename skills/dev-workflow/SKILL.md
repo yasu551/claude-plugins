@@ -90,6 +90,26 @@ Read `references/init-mode.md` and follow the procedure.
 
 ## Execution Mode
 
+### No-Stall Principle
+
+Once the workflow has started (after Step 1.5 resolves the effective task), it must run to Completion without pausing, **except at the explicit user-gate points enumerated below**. Every other step — including every skill invocation, every no-op outcome, every "nothing to report" result — must be judged semantically by the agent and passed through automatically. Do not rely on exact-phrase matching; if the skill result reads as a successful completion (fixes applied, no changes needed, no violations, no new rules, or any equivalent "success / no-op" outcome regardless of wording), treat it as success and proceed to the next step.
+
+**Explicit user-gates (the only permissible pause points):**
+
+Each bullet names the gate and points to the authoritative definition site. When editing either the enumeration or the definition, update both together.
+
+- **Step 1.5 task-decomposition proposal dialogue** — `yes / adjust / no` confirmation (Normal sub-mode; defined in Step 1.5 dispatch and `references/task-decomposition.md` § B. Normal sub-mode)
+- **Step 1.5 leftover-subtask picker dialogue** — selecting which subtask to run when more than one leftover `in_progress` subtask is runnable (Resume sub-mode; defined in `references/task-decomposition.md` § A. Resume sub-mode)
+- **Step 4 plan approval** (defined in Step 4: Finalize Plan)
+- **Step 7 check/test fail-stop** — failure after 3 retries: report the error and stop (defined in Step 7: Check / Test). Note: this is an error-stop, not a pause for user decision
+- **Step 7.5 persistent-violations decision** — rule violations still present after the 2nd review cycle (defined in Step 7.5: Rules Compliance Review)
+- **Step 8 unresolved-findings decision** — reviewer-reported actionable findings still unresolved after the N-th iteration (defined in Step 8: Code Review)
+- **Completion subtask PR URL prompt** — when executing a decomposed subtask, ask for optional PR URL before resuming (defined in Completion)
+
+**Fatal errors are out of scope for this principle**: configuration-file absence, malformed state file, irrecoverable skill / tool failures, and similar infrastructure-level errors halt the workflow with a diagnostic regardless of whether they appear in the list above. The No-Stall Principle governs *successful* step outcomes (including no-op successes); it does not force the agent to push through genuine errors.
+
+At any point not listed above — including after `Skill(simplify)`, `Skill(rules-review)`, `Skill(extract-rules)`, `Skill(run-tests)`, and reviewer skills return — the agent must never wait for the user to say "continue" / "続けて". Semantic judgment of the returned result is sufficient.
+
 ### Step 1: Load Settings
 
 1. Read settings from up to three layers and merge (type-aware):
@@ -213,6 +233,7 @@ Mark `Step 3: Plan Review` as `completed`.
 Implementation often introduces unnecessary complexity that's easier to spot in a dedicated pass after the code works.
 
 1. `Skill(simplify)`: Review changed code for reuse, quality, and efficiency, then fix any issues found. Pass `custom_instructions` as constraints for simplification
+2. Regardless of the outcome — whether `simplify` applied fixes, reported nothing to simplify, or returned any other non-error result — mark `Step 6: Simplify` as `completed` and proceed to Step 7 automatically. Per the No-Stall Principle, do not wait for user input.
 
 ### Step 7: Check / Test (max 3 retries)
 
@@ -232,12 +253,12 @@ Implementation often introduces unnecessary complexity that's easier to spot in 
 Dedicated rules compliance check, separate from code review (Step 8). This ensures rule enforcement gets focused attention rather than competing with correctness and design concerns.
 
 1. `Skill(rules-review)` with `--base-commit <sha>` (base-commit recorded in Step 2) via `$ARGUMENTS`
-2. If result indicates no violations (e.g., "No rule violations found", "All rules compliant", "No applicable rules for changed files", "No changed files", "No rule files found"): mark completed, proceed to Step 8
+2. Judge the result semantically: if the skill reports that there is nothing to act on — no actionable violations, no changed files, no applicable rules, no rule files found, or any other "nothing to report" outcome regardless of exact wording — mark `Step 7.5: Rules Compliance Review` as `completed` and proceed to Step 8 automatically. Per the No-Stall Principle, do not wait for user input and do not rely on exact-phrase matching; trust semantic judgment since the skill's phrasing may evolve across versions.
 3. If violations found:
    a. Fix all reported violations
    b. Re-run Step 7 (Check / Test) to ensure fixes did not break anything
-   c. Re-run `Skill(rules-review)` with `--base-commit <sha>` for verification (2nd cycle)
-   d. If violations persist after 2 cycles, present remaining violations to user for decision. Wait for user response before marking completed.
+   c. Re-run `Skill(rules-review)` with `--base-commit <sha>` for verification (2nd cycle). Apply the same semantic judgment as step 2: if the re-run reports nothing actionable, mark `Step 7.5: Rules Compliance Review` as `completed` and proceed to Step 8 automatically (per the No-Stall Principle).
+   d. If violations still persist after the 2nd review cycle, present remaining violations to user for decision. Wait for user response before marking completed. (This is one of the explicit user-gates enumerated in the No-Stall Principle.)
 
 Mark `Step 7.5: Rules Compliance Review` as `completed` only after all violations are resolved or user has decided on remaining violations.
 
@@ -275,6 +296,7 @@ Mark `Step 8: Code Review` as `completed`.
 1. `Skill(extract-rules)` with `--from-conversation` (always)
 2. `Skill(extract-rules)` with `--update` (trigger on either: significant structural/pattern changes occurred, OR a dependency had a recent major-version bump — i.e. the semver major digit increased in the manifest, not a minor / patch — detected via `git diff <base-commit>` of the package manifest. The same signal used in the Step 2 difficulty assessment. The major-bump trigger opens the extract-rules Update Mode operational note, which prompts manual review of `.examples.md` samples that may have gone stale after the bump)
 3. If extract-rules is unavailable, skip this step and inform user
+4. After the applicable invocations above return, or after the step was skipped because extract-rules is unavailable — regardless of whether new rules were added or the report indicates nothing changed — mark `Step 9: Update Rules` as `completed` and proceed automatically. Per the No-Stall Principle, do not wait for user input.
 
 ### Step 9.5: Self-Retrospective
 

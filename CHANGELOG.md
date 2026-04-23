@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-04-23
+
+### dev-workflow v1.32.1 / dev-workflow-bundle v1.32.1
+
+- fix(dev-workflow): Introduce No-Stall Principle so the workflow never pauses except at explicit user-gate points
+  - New `## No-Stall Principle` section placed at the top of `## Execution Mode`. Enumerates the exhaustive list of permissible pause points (Step 1.5 decomposition dialogue, Step 1.5 Resume picker, Step 4 plan approval, Step 7 after 3 retries, Step 7.5 step 3.d persisting violations, Step 8 step 4 unresolved findings, Completion subtask PR URL prompt). At every other point the agent must treat skill results semantically and proceed automatically — no reliance on exact-phrase matching
+  - Step 6 (Simplify): add an explicit completion clause — regardless of whether `Skill(simplify)` applied fixes or returned any other non-error result, mark the step `completed` and proceed to Step 7 automatically. Previously the step had a single sub-step (the skill invocation) with no guidance on handling a no-op return, so the workflow paused until the user said "continue"
+  - Step 7.5 (Rules Compliance Review) step 2: replace the exact-phrase list ("No rule violations found", "All rules compliant", …) with a semantic-judgment instruction. The list was fragile because (i) `"All rules compliant"` was never emitted by the current rules-review implementation, and (ii) any future wording change in rules-review would silently break the match. Semantic judgment plus the No-Stall Principle is robust to output-format drift
+  - Step 7.5 step 3.c (2nd-cycle re-run after violation fix): make the clean-2nd-cycle branch explicit — reuse the same semantic judgment as step 2 and proceed to Step 8 automatically. Previously only the "violations persist" branch was written, leaving the clean-re-run case without an explicit progress instruction
+  - Step 9 (Update Rules): add a closing sub-step — after `Skill(extract-rules)` invocations return, mark the step `completed` and proceed automatically regardless of whether new rules were added or the skill reported nothing changed. Pre-emptive alignment with the No-Stall Principle so Step 9 stays consistent with Steps 6 and 7.5
+
 ## 2026-04-22
 
 ### dev-workflow v1.32.0 / dev-workflow-bundle v1.32.0
