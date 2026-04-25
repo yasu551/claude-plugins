@@ -241,6 +241,7 @@ Implementation often introduces unnecessary complexity that's easier to spot in 
 
 1. Run `check_commands` in order (always run all)
    - On failure, fix and retry (do not proceed to test execution)
+   - **Scope-drift guard**: before each command, record `git diff --name-only <base-commit>`. After the command, re-check — any file that newly appeared outside the task scope was written by the command (auto-fix/write behavior sweeping unrelated drift). If scope drift is detected, warn the user and stop; do not silently accept writes to out-of-scope files
 2. Run `Skill(run-tests)` with `--base-commit <sha>` (from Step 2) via `$ARGUMENTS`
    - The skill handles scope decision and test execution internally via subagent
    - Returns structured summary: SUCCESS / TEST_FAILED / EXECUTION_ERROR
