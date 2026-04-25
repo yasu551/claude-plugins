@@ -6,7 +6,24 @@ allowed-tools: Read, Edit, Write, TodoWrite, Skill(verify-diff), Skill(skill-rev
 
 # Dev Workflow Triage
 
-Non-interactive daily triage of the `dev-workflow-bundle` retrospective issues. Either proceed to completion or abort with a clear summary — never wait for user input.
+Non-interactive daily triage of the `dev-workflow-bundle` retrospective issues. Designed for routine execution. See § No-Stall Principle below for the only permissible exits.
+
+## No-Stall Principle
+
+This skill has **no user-confirmation gates**. The run executes to completion or aborts to the Step 4 summary. Every other transition — sub-skill returns, loop boundaries, non-fatal error records — continues without user confirmation; the only stopping points are the two exits listed below.
+
+**Permissible fatal-abort exits (both emit the Step 4 summary and stop without entering the per-issue loop):**
+
+- Step 1 pre-flight failures (defined in Step 1)
+- Step 2 `gh issue list` non-zero exit (defined in Step 2)
+
+Whole-issue `parse-error` is **not** an abort; the issue is left open with a triage comment and the run continues.
+
+**No pause at sub-skill returns.** When `Skill(verify-diff)` or `Skill(skill-review)` returns, parse the result and follow the existing branch logic immediately. Long reasoning prose in the response is not a stopping signal — do not insert a "let me summarize what just happened" turn before the next action.
+
+**Non-fatal errors are recorded and skipped, not stops.** `comment-failed`, `close-failed`, `commit-failed`, and `overflow=true` all continue with the next Finding or issue — `references/triage-criteria.md` § Edge-case dispatch table is the authoritative list of dispositions.
+
+**Fatal tool-level errors are out of scope** — irrecoverable `Edit` / `Read` / `Bash` failures halt with a diagnostic regardless.
 
 ## Fixed configuration
 
@@ -44,6 +61,7 @@ fix(<target-skill>): <Finding 1-line summary> (auto-triage #<issue-N>)
 ### Step 2 — List open issues
 
 - Run `gh issue list --repo SonicGarden/dev-workflow-issues --state open --limit 200 --json number,title,body`. Use `jq` to extract fields when convenient (e.g. `... | jq -c '.[]'` to stream one issue per line, or `... | jq -r '.[].number'` to pull just numbers)
+- Non-zero exit ⇒ fatal abort with summary "gh issue list failed" (covers auth revoked / network failure mid-run — pre-flight only proves auth at start of run, not for the duration)
 - Empty ⇒ emit summary "no open issues" and exit
 - Exactly 200 ⇒ set `overflow=true` (surface in summary as "200-issue cap reached" — `gh issue list` truncates and doesn't return a total, so `== limit` is the overflow signal)
 
@@ -123,7 +141,7 @@ For each accepted Finding:
 After every Finding in the issue is classified (or immediately, if the whole issue was classified as `parse-error` by Parse body):
 
 - Build the body using the template in `references/triage-criteria.md`
-- `mkdir -p .claude/plans`, then `Write` to `.claude/plans/triage-<YYYY-MM-DD>-issue<N>.md`. On collision (re-run), append `-2`, `-3`, .... **Do not delete this file later** — it's the triage audit archive (mirrors the `retrospective-<slug>.md` archival pattern in `skills/dev-workflow/references/self-retrospective.md` § Output & submission)
+- `mkdir -p .claude/plans`, then `Write` to `.claude/plans/triage-<YYYY-MM-DD>-issue<N>.md`. On collision (re-run), append `-2`, `-3`, .... The file is gitignored and kept as a local in-session reference (the GitHub comment is canonical); do not delete it
 - Run `gh issue comment <N> --repo SonicGarden/dev-workflow-issues --body-file <path>`
 - Non-zero exit: record `comment-failed`, continue with other issues
 

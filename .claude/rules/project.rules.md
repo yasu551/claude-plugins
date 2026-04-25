@@ -40,6 +40,8 @@
 
 - ルーチン用途（Claude Code on the Web の定期実行など非対話環境）を想定するローカルスキル（`.claude/skills/<name>/`）は、外部プラグインスキル（`Skill(document-skills:*)` 等）への依存を避ける。Routine 環境に当該プラグインが install されていないと無条件失敗するため、参照したいベストプラクティスは `skills/<name>/references/` 配下に要旨を抽出して自己完結させる
 - スキル自身を修正する種類のルーチン（triage 等）では、1 改善 = 1 commit の粒度で落とす。複数 Finding が同一ファイルに当たる場合も、Finding ごとに対象ファイルを直前に再 Read → Edit を組み直し → commit を繰り返す。事前に「2 件目以降は conflict」と落とす過剰防衛はしない（日次ルーチンで issue が滞留する）
+- 非対話／ルーチン実行を想定するスキル（`dev-workflow` / `dev-workflow-triage` 等）には `No-Stall Principle` 節（または同等の "途中停止禁止" 節）を SKILL.md 冒頭に明記する。`Skill(...)` のサブスキル復帰点・ループ境界・非致命エラー処理点で「サマリして一区切りつける」誘惑が入り込むため、(i) 許容される唯一の非完走経路（fatal-abort exits）を closed list で列挙し、(ii) サブスキル復帰時は戻り値を意味的に判定して即座に既存分岐へ進むこと、(iii) 非致命エラー（`*-failed` 系、`overflow` 系）は記録して続行する旨、を明文化する。複数スキルで同名節を使う場合は表記を一致させ、各 SKILL.md 内のクロスリファレンスはサブステップ番号ではなく安定した節見出し（例: `§ No-Stall Principle`）で行う
+- Claude Code on the Web などの ephemeral 実行環境を主戦場とするルーチンスキルが作業用ファイル（`.claude/plans/<skill>-*.md` 等の staging 文書）を生成する場合、デフォルトを「成功時削除（retrospective pattern の mirror）」にしない。(i) session 終了で workspace ごと破棄されるため蓄積が起きない、(ii) ファイルを残すことで Web file viewer から in-session 確認が可能になる、(iii) 外部（GitHub issue comment 等）に canonical な永続記録が既にある、の 3 条件が揃う場合は「ファイルを残す + `.gitignore` で commit 混入だけをブロック」を優先する。SKILL.md には「gitignored なので commit されない／外部コメントが canonical record」である旨を明記し、`rm` を allowed-tools に足さない（権限最小化）
 
 ## プラグイン構造
 
