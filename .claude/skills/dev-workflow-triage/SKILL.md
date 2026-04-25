@@ -141,7 +141,7 @@ For each accepted Finding:
 After every Finding in the issue is classified (or immediately, if the whole issue was classified as `parse-error` by Parse body):
 
 - Build the body using the template in `references/triage-criteria.md`
-- `mkdir -p .claude/plans`, then `Write` to `.claude/plans/triage-<YYYY-MM-DD>-issue<N>.md`. On collision (re-run), append `-2`, `-3`, .... The file is gitignored and kept as a local in-session reference (the GitHub comment is canonical); do not delete it
+- `mkdir -p .triage`, then `Write` to `.triage/triage-<YYYY-MM-DD>-issue<N>.md`. On collision (re-run), append `-2`, `-3`, .... The file is gitignored and kept as a local in-session reference (the GitHub comment is canonical); do not delete it. The directory is intentionally placed outside `.claude/` so Claude Code's sensitive-path treatment for `.claude/*` paths does not trigger a Write permission prompt during routine execution
 - Run `gh issue comment <N> --repo SonicGarden/dev-workflow-issues --body-file <path>`
 - Non-zero exit: record `comment-failed`, continue with other issues
 
