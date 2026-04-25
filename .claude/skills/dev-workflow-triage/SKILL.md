@@ -23,7 +23,7 @@ Whole-issue `parse-error` is **not** an abort; the issue is left open with a tri
 
 Concretely, the recognized return points are the (d) `Skill(verify-diff)` empirical check and the (d2) `Skill(skill-review)` polish bullets inside the Apply accepted Findings sub-flow. Both carry a return-point no-stall reminder inline; the duplication with this section is intentional so the rule appears at the decision moment.
 
-**Non-fatal errors are recorded and skipped, not stops.** Per-Finding errors (`comment-failed`, `close-failed`, `commit-failed`, `overflow=true`) continue with the next Finding or issue. Step 3.7 errors (`release-bookkeeping=failed (commit error|scope leak|version skew|json invalid|changelog edit error)`) fall through to Step 4 — Step 3.7 runs once per run after the per-issue loop, so "next Finding" is not a possible recovery there. `references/triage-criteria.md` § Edge-case dispatch table is the authoritative list of dispositions.
+**Non-fatal errors are recorded and skipped, not stops.** Per-Finding / per-issue errors (`comment-failed`, `close-failed`, `commit-failed`) continue with the next Finding or issue. Step 2 records `overflow=true` and the run keeps going on the truncated list. Step 3.7 errors (`release-bookkeeping=failed (commit error|scope leak|version skew|json invalid|changelog edit error)`) fall through to Step 4 — Step 3.7 runs once per run after the per-issue loop, so "next Finding" is not a possible recovery there. `references/triage-criteria.md` § Edge-case dispatch table is the authoritative list of dispositions.
 
 **Fatal tool-level errors are out of scope** — irrecoverable `Edit` / `Read` / `Bash` failures halt with a diagnostic regardless.
 
@@ -102,9 +102,10 @@ Process accepted Findings one at a time in the order they appear. Same-file Find
 
 **Per-Finding record kept in memory for the Step 4 execution log** — alongside the existing decision + reasoning store from § 3.3, also keep a small structured record per processed Finding so Step 4's Per-Finding execution log can render it. **TodoWrite is the progress UI, not a record source — it cannot be read back at runtime, so anything Step 4 needs has to be held in memory here.** The record fields:
 
-- `disposition`: `accept` / `reject` / `conflict` / `parse-error`
+- `disposition`: `accept` / `reject` / `conflict` / `parse-error`. **Initialized to `accept` on entry to (a)** so any downgrade path that fires in (b)/(c)/(d)/(f)/(g) simply overwrites it, and a missed downgrade can never leave the field undefined.
 - `target`: the edit target path from (b), or `—` when no edit was attempted
-- `verify_diff`: status token from (d) — `converged` / `unresolved` / `skipped` / `conflict` / `disabled` — paired with `iterations_used` from the JSON verdict (set to `0` when the call was skipped because `verify_diff_disabled=true`)
+- `verify_diff`: status token from (d) — `converged` / `unresolved` / `skipped` / `conflict` / `disabled`
+- `iterations_used`: integer from `verify-diff`'s JSON verdict (set to `0` when the call was skipped because `verify_diff_disabled=true`)
 - `skill_review`: terminal token from (d2) — `converged-iter-<k>` (where `<k>` is the iteration that returned "No actionable findings", 1–3), `notes-left-after-3`, `error`, `skipped` (when (d2) was bypassed because verify-diff returned `conflict`), or `disabled`
 - `commit`: the commit hash from (g), or `—` when no commit happened
 
