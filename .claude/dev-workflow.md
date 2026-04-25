@@ -8,6 +8,7 @@ test_commands:
 hooks:
   on_complete:
     - "Skill(skill-review)"
+    - "Skill(verify-diff)"
 self_retrospective:
   feedback: "SonicGarden/dev-workflow-issues"
 ---
