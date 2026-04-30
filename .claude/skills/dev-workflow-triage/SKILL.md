@@ -29,7 +29,25 @@ Concretely, the recognized return points are the (d) `Skill(verify-diff)` empiri
 
 **Non-fatal errors are recorded and skipped, not stops.** Per-Finding / per-issue errors (`comment-failed`, `close-failed`, `commit-failed`) continue with the next Finding or issue. Step 2 records `overflow=true` and the run keeps going on the truncated list. Step 3.7 errors (`release-bookkeeping=failed (commit error|scope leak|version skew|json invalid|changelog edit error)`) fall through to Step 4 — Step 3.7 runs once per run after the per-issue loop, so "next Finding" is not a possible recovery there. `references/triage-criteria.md` § Edge-case dispatch table is the authoritative list of dispositions.
 
+**Stop-hook spurious fires are also non-fatal.** `~/.claude/stop-hook-git-check.sh` (auto-installed by Claude Code on the Web — see `§ Stop hook structural conflict`) fires on every Stop event during the (b)→(g) per-Finding flow because uncommitted state is normal mid-flow. The hook's `exit 2` injects a `Please commit and push…` feedback string but does **not** block — record the spurious fire and continue with the prescribed flow ((b)→(c)→(d)→(d2)→(f)→(g)). Do **not** jump ahead to (g) commit on hook feedback alone; that bypasses verify-diff / skill-review / scope check and is a misbehavior.
+
 **Fatal tool-level errors are out of scope** — irrecoverable `Edit` / `Read` / `Bash` failures halt with a diagnostic regardless.
+
+## Stop hook structural conflict (Claude Code on the Web)
+
+Claude Code on the Web's container auto-installs `~/.claude/stop-hook-git-check.sh` (mode 755) at startup and registers it under `~/.claude/settings.json` `hooks.Stop` with an empty matcher (matches every Stop event). This is part of the Web environment's standard setup, **not** a user-defined hook.
+
+**What it does**: on every Stop event, the hook checks the git working tree (recursion guard via `stop_hook_active`, then git-repo / remote / uncommitted / untracked / unpushed in order). If any of the last four trip, it `exit 2`s and injects a stderr feedback string (`Please commit and push…`) so the agent's turn continues — the hook **does not** block execution.
+
+**Conflict mechanism**: the per-Finding flow in `§ 3.4 Apply accepted Findings` runs `(b) Edit → (c) frontmatter check → (d) Skill(verify-diff) → (d2) Skill(skill-review) (×3) → (f) scope check + stage → (g) commit`. Each subagent dispatch (verify-diff, the three skill-review iterations) creates a turn boundary, and uncommitted working-tree state between (b) and (g) is **normal** — that is the design. The hook fires at every boundary and feeds back `Please commit and push…` each time.
+
+**Correct behavior**: see `§ No-Stall Principle`'s "Stop-hook spurious fires are also non-fatal" paragraph for the disposition. The cross-references in `verify-diff` SKILL.md (§ Stop hook structural conflict (caller-side note)) and `skill-review` SKILL.md (§ Scope) point back here so the same disposition is applied caller-agnostic.
+
+**Bypass / disable guidance**:
+
+- Permanent removal is discouraged — the hook serves other Web-environment purposes (e.g. nudging users about uncommitted state on conventional sessions)
+- Per-routine bypass is unnecessary because the hook does not block (`exit 2` is a continue signal). Following the No-Stall Principle is sufficient
+- Step 1 Pre-flight detects the hook's presence and surfaces it in the Step 4 summary as observability. Detection is warning-only — never an abort
 
 ## Fixed configuration
 
