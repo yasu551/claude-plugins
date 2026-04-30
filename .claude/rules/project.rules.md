@@ -35,6 +35,7 @@
 
 - このリポジトリは配布用マーケットプレイスのため、SKILL.md にユーザー固有の情報（特定リポジトリ名 `owner/repo`、絶対パス、個人識別子等）をハードコードしない
 - リポジトリ情報やパスが必要な機能は設定ファイル（`.claude/<skill>.local.md` 等の frontmatter）経由で受け取る
+- `~/.claude/...` 配下のパス（例: `~/.claude/settings.json`、`~/.claude/stop-hook-git-check.sh`）は **Claude Code の標準 config root** であり、ユーザー固有パスではない。SKILL.md からこれらを参照する（`jq -r '...' ~/.claude/settings.json` 等）のは配布性違反にならない。「絶対パスをハードコードしない」原則の対象は、特定ユーザーの `/Users/<name>/...` や個別プロジェクト固有の絶対パスに限る
 
 ## ローカルスキル設計
 
@@ -49,6 +50,9 @@
 - 非対話／ルーチン実行を想定するスキルで collection ループが 0 件で skip される経路（例: `gh issue list` が 0 件 → per-issue ループ非実行 → 直接 termination phase へ）では、複数 phase 行（`Step 2 / Step 3 / Step 3.7 / Step 4` 等）を **1 回の TodoWrite call で同時遷移**（`completed` flip を一括）させる慣行を採る。phase 行ごとに別 call を発行すると stall 誘発点が増えるため、0-item 経路は「multi-row flip in single call」として SKILL.md prose に明記する
 - 非対話／ルーチン実行を想定するスキルで分岐 path（例: `title-mismatch-skip` 短絡 path）が下流の dispatch ブロック（reminder / status flip 等）を経由しない構造になっている場合、上流 sub-step 末尾に **forward jump pointer**（例: `Skipping does not bypass the reminder dispatch — apply the dispatch at the end of § Close decision`）を明示的に挿入する。短絡 path に分岐したまま「skip = 何もしない」と誤解されると下流の必須 transition が抜ける
 - 非対話／ルーチン実行を想定するスキルの `§ No-Stall Principle` 節で、同じ境界に対して条件で分かれる reminder（例: issue-loop boundary で「more issues remain → reminder #1」「last issue → reminder #2」）を配置する場合、**両 variant を SKILL.md 上で並列に prose 記述**し agent が runtime で applicable variant を選ぶ形を採る。dispatch 位置を分散させると agent が決定点で当該節を参照しにくくなるため、closed-list 形式の reminder を同一位置に並べる（reminder #2 にも `, any non-error result` を含めて #1/#3 と structural 整合させる）
+- 多段階 subagent dispatch を伴うルーチン（例: `dev-workflow-triage` の per-Finding `(b)–(g)` flow）で、Web 環境の自動配置フック（例: `~/.claude/stop-hook-git-check.sh` の uncommitted-change ガード）など **環境起因の spurious feedback** が走行を断片化する構造的衝突がある場合、orchestrator スキル（triage 等）の SKILL.md に **canonical な write-up 節**（`§ Stop hook structural conflict` 等）を立て、衝突メカニズム / correct behavior / Pre-flight 検知の指針を集約する。Pre-flight 段階で `jq -r '.hooks.Stop // empty' ~/.claude/settings.json` 等で hook 登録を検出したら、abort せず summary に warning 行を出す（observability 目的、`stop_hook_present=true` のような形）
+- 上記の orchestrator 集約とセットで、orchestrator 経由で dispatch される **callee スキル**（`verify-diff` / `skill-review` 等）の SKILL.md にも **short cross-reference note** を該当節（`§ Scope check boundary` / `§ Scope` 等）周辺に追加する。callee 側 note は canonical を再記述せず、衝突文脈と「該当しない場合は無視してよい」旨だけを 2–3 文で書き、orchestrator の節へ stable heading で参照する。orchestrator 単独修正だと callee subagent 内の決定点で参照されないため、cross-skill 影響の構造的衝突は **orchestrator + 全 callee** をペアで documenting する
+- 非対話／ルーチン実行を想定するスキルの `§ No-Stall Principle` 節で non-fatal error class を列挙する場合、per-Finding / per-issue 単位の処理失敗（`comment-failed` / `close-failed` / `commit-failed` 等）に加えて、**per-turn 単位の environment-induced spurious feedback**（`stop-hook spurious fire` 等の環境起因フィードバック）も並列の non-fatal class として明記する。両者は disposition は同じ（記録して続行）だが発生粒度が異なるため、agent が「フックの指示に従って即 commit する」ような誤動作を防ぐには文章として明示的に列挙する必要がある
 
 ## プラグイン構造
 

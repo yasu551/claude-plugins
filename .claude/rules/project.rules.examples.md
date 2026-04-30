@@ -118,3 +118,66 @@ After the last issue is processed, jump to Step 3.7.
 (For non-last issues, reminder #1 in another section applies.)
 ```
 （dispatch 位置が分散すると agent が決定点で参照しにくくなる）
+
+### `~/.claude/` 配下は Claude config root
+**Good** (`dev-workflow-triage` Pre-flight):
+```markdown
+**Stop hook detection** (Web env observability): run
+`jq -r '.hooks.Stop // empty' ~/.claude/settings.json`
+and if the output is non-empty, set `stop_hook_present=true` and surface
+a warning line in the Step 4 summary. Do not abort.
+```
+（`~/.claude/settings.json` は Claude Code 標準 config root への参照であり、ユーザー固有の絶対パスではないので SKILL.md にハードコードしてよい）
+**Bad:**
+```markdown
+**Stop hook detection**: run
+`jq -r '.hooks.Stop // empty' /Users/alice/.claude/settings.json`
+```
+（特定ユーザーの `/Users/<name>/...` を埋め込むと配布性が壊れる）
+
+### Cross-skill 構造的衝突の orchestrator + callee documenting
+**Good** (orchestrator `dev-workflow-triage/SKILL.md` canonical):
+```markdown
+## Stop hook structural conflict
+
+**Conflict mechanism**: the per-Finding flow in `§ 3.4 Apply accepted Findings`
+runs `(b) Edit → (d) Skill(verify-diff) → (d2) Skill(skill-review) ×3 →
+(g) commit`. Each subagent dispatch creates a turn boundary, and uncommitted
+state between (b) and (g) is **normal**. The hook fires every boundary.
+
+**Correct behavior**: treat hook feedback as a non-fatal `stop-hook spurious
+fire` per § No-Stall Principle — record and continue, do not commit prematurely.
+```
+**Good** (callee `verify-diff/SKILL.md` short note near `§ Scope check boundary`):
+```markdown
+> **Stop hook note (Web env)**: if a `~/.claude/stop-hook-git-check.sh` style
+> Stop hook is registered, it may fire mid-dispatch with uncommitted-change
+> feedback. This is a known structural conflict — see
+> `§ Stop hook structural conflict` in the orchestrator (`dev-workflow-triage`).
+> Ignore the feedback and continue the prescribed flow.
+```
+（orchestrator に canonical write-up、callee には 2–3 文の short note + stable heading 参照）
+**Bad** (callee 側で canonical を full 再記述):
+```markdown
+## Stop hook structural conflict
+**Conflict mechanism**: per-Finding flow runs (b) Edit → (d) verify-diff → ...
+（以下 orchestrator と同一の長文）
+```
+（callee で full 再記述すると、orchestrator 側の更新が伝播しない／冗長）
+
+### Per-turn environment-induced spurious feedback を non-fatal class に列挙
+**Good** (`§ No-Stall Principle` 内):
+```markdown
+**Non-fatal errors (record and continue):**
+- Per-Finding/issue: `comment-failed`, `close-failed`, `commit-failed`
+- Per-turn (environment-induced): `stop-hook spurious fire` —
+  Web env's `~/.claude/stop-hook-git-check.sh` may inject
+  `Please commit and push…` between turns; record and proceed to the
+  next prescribed action.
+```
+（per-Finding と per-turn の disposition class を並列に列挙、disposition は同じだが発生粒度を分けて明示）
+**Bad:**
+```markdown
+**Non-fatal errors:** comment-failed, close-failed, commit-failed
+```
+（per-turn class が抜けると agent が hook フィードバックを fatal 扱いして即 commit する誤動作経路が開く）
