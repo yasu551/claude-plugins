@@ -17,11 +17,11 @@ Analyzes existing codebase to identify what Claude would get wrong without proje
 /extract-rules --restructure        # Re-analyze, reorganize structure, merge existing rules
 /extract-rules --from-conversation              # Extract from current session (latest)
 /extract-rules --from-conversation <session-id> # Extract from a specific session
-/extract-rules --from-pr 123                   # カレントリポのPR指定
-/extract-rules --from-pr owner/repo#123        # 他リポのPR指定（URL形式も可）
-/extract-rules --from-pr 100..110              # 範囲指定（カレントリポ）
-/extract-rules --from-pr owner/repo#100..110   # 範囲指定（他リポ）
-# 複数指定可（スペース区切り）→ 横断分析で組織重視の原則を検出
+/extract-rules --from-pr 123                   # PR in current repo
+/extract-rules --from-pr owner/repo#123        # PR in another repo (URL form also accepted)
+/extract-rules --from-pr 100..110              # PR range (current repo)
+/extract-rules --from-pr owner/repo#100..110   # PR range (another repo)
+# Multiple specs allowed (space-separated) → cross-analysis detects org-wide principles
 ```
 
 ## Configuration
