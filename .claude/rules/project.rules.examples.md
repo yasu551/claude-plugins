@@ -181,3 +181,75 @@ fire` per § No-Stall Principle — record and continue, do not commit premature
 **Non-fatal errors:** comment-failed, close-failed, commit-failed
 ```
 （per-turn class が抜けると agent が hook フィードバックを fatal 扱いして即 commit する誤動作経路が開く）
+
+### Callee-side fenced JSON return contract for stall-prone sub-skills
+**Good** (callee `skill-review/SKILL.md` 末尾):
+````markdown
+## Return contract
+
+When invoked as a sub-skill (via `Skill(skill-review)`), terminate the
+processing turn by emitting a single fenced JSON block:
+
+```json
+{
+  "status": "no-actionable-findings" | "applied-edits" | "notes-left" | "error",
+  "applied_edits_count": <int>,
+  "notes_remaining_count": <int>,
+  "reason": "<optional, required when status=error>"
+}
+```
+
+Do not emit a prose checklist walk-through after the JSON block — the
+caller parses the JSON and proceeds. The orchestrator (`dev-workflow-triage`
+§ 3.4 Apply accepted Findings) maps `status` to its `record.skill_review`
+token and dispatches the next action.
+````
+（fenced JSON 末尾必須にすると verdict turn が短く閉じて orchestrator の parse → 次 action フローが組める）
+**Bad** (callee verdict が free-form prose のみ):
+```markdown
+After running the checklist:
+- Frontmatter: untouched.
+- Structure / length: ...
+- Writing style: ...
+（9 項目の prose checklist walk-through）
+
+No actionable findings.
+```
+（prose verdict が turn 全体を消費して自然な turn-end を作り、orchestrator の return-point reminder では救えず stall する）
+
+### Orchestrator-side verdict parse-failure handling
+**Good** (orchestrator `dev-workflow-triage/SKILL.md` (d2) bullet 内):
+```markdown
+Parse the fenced JSON verdict at the end of `Skill(skill-review)` output.
+Map `status` per the table below; if the JSON block is missing or
+malformed (verdict parse failure), or `status: "error"` is returned,
+**terminate the (d2) loop with no retry**, increment the (e) error
+counter, and proceed to the next Finding.
+
+| status | record.skill_review token | next action |
+|---|---|---|
+| `no-actionable-findings` | `clean` | proceed to (f) |
+| `applied-edits` | `notes left after applied-edits (<n>)` if `notes_remaining_count > 0` else `clean` | proceed to (f) |
+| `notes-left` | `notes left after 3 iters (<n>)` | proceed to (f) |
+| `error` / parse-failure | `parse-error` | terminate (d2), no retry |
+```
+（verify-diff の `Verdict missing or malformed` style と整合させ、JSON 経路の `error` と parse-failure を別経路として明文化）
+**Bad:**
+```markdown
+After `Skill(skill-review)` returns, judge the result and proceed to (f).
+```
+（callee contract が壊れたときの分岐が無く、orchestrator が無限 loop か沈黙に落ちる）
+
+### Aggregate counter warning string differentiation
+**Good** (Step 4 aggregate summary):
+```text
+- skill-review notes left after applied-edits (3)   # M2: applied-edits 経路の残 notes
+- skill-review notes left after 3 iters (1)         # M2: iter 上限到達経路の残 notes
+```
+（同じ `notes_remaining_count` でも sub-condition が違うので warning 文字列を differentiate、SKILL.md にも区別意図を 1 行明記）
+**Bad:**
+```text
+- skill-review notes left (3)
+- skill-review notes left (1)
+```
+（同一文字列に集約すると user が「どの sub-source が threshold を踏んだか」を identify できず、後追い triage で原因切り分け不能）
