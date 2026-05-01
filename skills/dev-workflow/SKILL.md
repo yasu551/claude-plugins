@@ -263,7 +263,7 @@ Dedicated rules compliance check, separate from code review (Step 8). This ensur
 3. If violations found:
    a. Fix all reported violations
    b. Re-run Step 7 (Check / Test) to ensure fixes did not break anything
-   c. Re-run `Skill(rules-review)` with `--base-commit <sha>` for verification (2nd cycle). Apply the same semantic judgment as step 2: if the re-run reports nothing actionable, mark `Step 7.5: Rules Compliance Review` as `completed` and proceed to Step 8 automatically (per the No-Stall Principle).
+   c. Re-run `Skill(rules-review)` with `--base-commit <sha>` for verification (2nd cycle). Apply the same semantic judgment as step 2: if the re-run reports nothing actionable, mark `Step 7.5: Rules Compliance Review` as `completed` and proceed to Step 8 automatically (per the No-Stall Principle). When a 2nd-cycle verdict differs from the 1st on a specific location (a previously-flagged item now passes, or a previously-clean location is now flagged), record the reason in the Step 7.5 audit trail before completing — judgment drift between cycles is acceptable but must be explained, otherwise repeat-cycle stability cannot be assessed.
    d. If violations still persist after the 2nd review cycle, present remaining violations to user for decision. Wait for user response before marking completed. (This is one of the explicit user-gates enumerated in the No-Stall Principle.)
 
 Mark `Step 7.5: Rules Compliance Review` as `completed` only after all violations are resolved or user has decided on remaining violations.
