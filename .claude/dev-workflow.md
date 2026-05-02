@@ -9,6 +9,7 @@ hooks:
   on_complete:
     - "Skill(skill-review)"
     - "Skill(verify-diff)"
+    - "Skill(publicity-review)"
 self_retrospective:
   feedback: "SonicGarden/dev-workflow-issues"
 ---

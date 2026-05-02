@@ -463,3 +463,61 @@ If validation fails, emit an error verdict.
 - **Cross-skill structural-blast-radius**: if the plan fixes a structural pattern (subagent dispatch shape, hook wiring, or state-file handling pattern) rather than content scoped to one skill, check whether sibling skills sharing that structure have the same defect.
 ```
 （適用文脈固定の語彙が主文に直接埋まると、bundle skill を skill 開発以外の用途で利用する読者が読み解きづらい / 適用しにくい）
+
+### Pattern A iteration loop skill の `allowed-tools` baseline mirror
+**Good** (`skills/publicity-review/SKILL.md` frontmatter):
+```yaml
+---
+name: publicity-review
+description: ...
+allowed-tools: Read, Edit, Agent, TodoWrite, Bash(git diff *), Bash(git rev-parse *), Bash(git checkout HEAD -- *)
+---
+```
+（sibling Pattern A skill `verify-diff` の `allowed-tools` を mirror。`TodoWrite` を含めることで sub-skill 経由 invocation 時の permission dialog を未然に防ぐ）
+**Bad:**
+```yaml
+---
+name: publicity-review
+description: ...
+allowed-tools: Read, Edit, Agent, Bash(git diff *), Bash(git rev-parse *)
+---
+```
+（SKILL.md prose 内で `iteration TodoWrite items を pre-register` と書きながら frontmatter に `TodoWrite` を宣言し忘れている。non-interactive routine から呼ぶと permission dialog で停止する。新規 Pattern A skill 追加時は sibling の `allowed-tools` 行を 1 行 diff で照合する）
+
+### Iter loop の (a) Dispatch sub-step での選択的 re-Read
+**Good** (`skills/publicity-review/SKILL.md` Step 2 (a)):
+```markdown
+On iter 1, `Read` the full current contents of each `affected_files` entry. On `i ≥ 2`, only re-`Read` the subset of `affected_files` whose path appeared in a successfully-applied `suggested_edits` entry during iter `i-1` (untouched files keep their iter-1 snapshot — re-reading them is wasted work and balloons main-thread context). On `i ≥ 2`, also re-run `git diff <Base ref>` so the diff reflects edits that landed in prior iterations.
+```
+（iter 1 = 全件 Read、iter 2+ = 直前 iter で edit 成功したファイルのみ再 Read。`git diff` も再実行して累積 edits を反映）
+**Bad:**
+```markdown
+At the start of every iteration, `Read` the full current contents of each `affected_files` entry and re-run `git diff <Base ref>`.
+```
+（毎 iter で全件 Read すると main-thread context が肥大し、token 効率も悪い。untouched files の snapshot を保持して reuse する）
+
+### 集約サマリでの source-of-truth labeling
+**Good** (`dev-workflow-triage/SKILL.md` Step 4 publicity-review breakdown):
+```markdown
+- publicity-review state: `enabled` or `disabled-after-errors`; count of Findings with `publicity-review unresolved (<n>)` broken down by top category (e.g. `secret×N, ...`); count of Findings with `publicity-review conflict (<reason>)` broken down by reason; count of Findings with `publicity-review skipped (<reason>)` broken down by reason. **Source of truth: the warning strings recorded by (d3) (the `unresolved`/`conflict`/`skipped` rows), not the per-Finding `record.publicity_review` token (which stores a count only).** Same pattern as the verify-diff and skill-review aggregate lines above.
+```
+（counter を render する複数の sub-source（warning 文字列 vs per-Finding record token）が存在する場合、どちらが canonical かを 1 行明記）
+**Bad:**
+```markdown
+- publicity-review state: ... count of Findings with `publicity-review unresolved (<n>)` broken down by top category; count of Findings with `publicity-review conflict (<reason>)` broken down by reason; count of Findings with `publicity-review skipped (<reason>)` broken down by reason.
+```
+（canonical な source が読めず、後追い triage で「どちらの値を信じればよいか」が判断できない）
+
+### orchestrator render の `<max_iterations>` ハードコード
+**Good** (`dev-workflow-triage/SKILL.md` per-Finding render rules):
+```markdown
+- `verify_diff` ∈ {`converged`, `unresolved`, `skipped`, `conflict`}: render `<token> [iter <iterations_used>/3]`
+- `publicity_review` ∈ {`converged-iter-<k>`, `unresolved-<count>`, `conflict (<reason>)`, `skipped (<reason>)`}: render `<token> [iter <iterations_used>/2]`
+```
+（orchestrator が verify-diff には default 3、publicity-review には `Max iterations = 2` を渡しているため、それぞれの denominator を hardcode）
+**Bad:**
+```markdown
+- `verify_diff`: render `<token> [iter <iterations_used>/<max_iterations>]`
+- `publicity_review`: render `<token> [iter <iterations_used>/<max_iterations>]`
+```
+（プレースホルダのままだと caller がどの値を渡しているか読めず、複数 callee で異なる max を呼び分けるケースの denominator がブレる）
