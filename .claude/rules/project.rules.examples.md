@@ -455,9 +455,9 @@ If validation fails, emit an error verdict.
 ### bundle skill SKILL.md prose のメタ文脈語彙汎化
 **Good** (`skills/dev-workflow/SKILL.md` Step 2 self-audit bullet):
 ```markdown
-- **Cross-component structural-blast-radius**: if the plan fixes a structural pattern (shared base classes, cross-cutting middleware, mirrored services — for skill development these map to subagent dispatch shape, hook wiring, state-file handling) rather than content scoped to one component, check whether sibling components sharing that structure have the same defect.
+- **Cross-component structural-blast-radius**: if the plan fixes a structural pattern (shared base classes, cross-cutting middleware, return/API contracts, mirrored services, parallel route handlers — for skill development this includes subagent dispatch shape, hook wiring, state-file handling, return-contract design) rather than content scoped to one component, check whether sibling components sharing that structure have the same defect.
 ```
-（抽象原理「shared base classes, cross-cutting middleware, mirrored services」を主文に書き、skill 開発文脈の具体例「subagent dispatch shape, hook wiring, state-file handling」は括弧書きで添える）
+（抽象原理「shared base classes, cross-cutting middleware, return/API contracts, mirrored services, parallel route handlers」を主文に書き、skill 開発文脈の具体例「subagent dispatch shape, hook wiring, state-file handling, return-contract design」は括弧書きで添える）
 **Bad:**
 ```markdown
 - **Cross-skill structural-blast-radius**: if the plan fixes a structural pattern (subagent dispatch shape, hook wiring, or state-file handling pattern) rather than content scoped to one skill, check whether sibling skills sharing that structure have the same defect.
