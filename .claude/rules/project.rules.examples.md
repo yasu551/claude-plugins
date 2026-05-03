@@ -521,3 +521,89 @@ At the start of every iteration, `Read` the full current contents of each `affec
 - `publicity_review`: render `<token> [iter <iterations_used>/<max_iterations>]`
 ```
 （プレースホルダのままだと caller がどの値を渡しているか読めず、複数 callee で異なる max を呼び分けるケースの denominator がブレる）
+
+### Mode determination の 3 分岐契約 (all/none/partial)
+**Good** (`verify-diff/SKILL.md` `## Invocation contract` § Mode determination):
+```markdown
+- **All three present** → **explicit-args mode** (run `## Workflow` Step 1–5).
+- **All three absent** → **auto-derive mode** (run `## Auto-derive mode` instead).
+- **1 or 2 of the three provided** (incomplete framing) → return early with the explicit-args mode Step 1 schema (does **not** enter auto-derive mode — `incomplete args` is an explicit-args bug signal, surfaced loudly rather than silently falling back):
+  {"mode": "explicit-args", "status": "error", "reason": "incomplete args", ...}
+```
+（partial 入力は loud な bug signal として early return。silent fallback / 暗黙合流のいずれにも倒さない）
+**Bad:**
+```markdown
+- 3 つのうち 1 つ以上が指定されていれば explicit-args mode、全部空なら auto-derive mode。
+```
+（partial 入力が silent に explicit-args に倒れる設計。caller のテンプレ書き間違いが通ってしまい、後追いで「どちらの mode で動いたか」が読めない）
+
+### Pattern A iter loop の inferred-state iter-1 fixing
+**Good** (`verify-diff/SKILL.md` `A2 § Per-iter loop semantics` (6.1)):
+```markdown
+**(6.1) `inferred_intent` persistence**: capture `inferred_intent` from the **iter 1 verdict** into main-thread context and treat that value as fixed for the rest of the per-skill loop. iter 2+ verdicts may return a different `inferred_intent` because the executor reruns Phase 1 each dispatch — do **not** overwrite the iter-1 value. ... If iter 1 produced no parseable verdict (sub-case 1 / 2 / dispatch error) and the per-skill loop terminates immediately with `status=skipped`, set `inferred_intent: null` in the per-skill verdict object — there is no iter-1 value to fix. Divergence comparison (sub-case 4) uses the existing `(remaining_gaps, regressions)` multiset pair only; `inferred_intent` is excluded since the main thread fixes it.
+```
+（毎 iter ステートレスに再推論される値は iter 1 で main thread が capture して fix。iter 2+ 値で上書きしない・divergence 比較から除外・iter 1 が verdict 出さなかった経路は `null`）
+**Bad:**
+```markdown
+Each iter, the executor returns a new `inferred_intent`. Use the latest one in the per-skill verdict.
+```
+（毎 iter 上書きすると per-target verdict が「単一の安定した推論値」を報告できない。divergence 比較も noisy になり収束しない）
+
+### Mode-specific empty-input disposition
+**Good** (`verify-diff/SKILL.md` `## Auto-derive mode` § A1):
+```markdown
+2. If the diff is empty, return early with the auto-derive aggregate shape (matches A3 schema):
+
+   {"mode": "auto-derive", "status": "skipped", "reason": "empty diff", "iterations_used_total": 0, ...}
+
+   Auto-derive treats an empty diff as `skipped` rather than `conflict` (the explicit-args mode policy) — without caller framing, an empty diff is informational, not a bug signal.
+```
+（caller framing がある explicit-args では empty-diff = conflict、無い auto-derive では empty-diff = skipped。同じ「空入力」状態でも文脈で disposition を分ける）
+**Bad:**
+```markdown
+2. If the diff is empty, return `{"status": "conflict", "reason": "empty diff"}` regardless of mode.
+```
+（auto-derive mode では caller framing がないので「空 = bug」と断定する根拠がない。informational 扱いで `skipped` に倒すのが正しい）
+
+### Mode-additive status enum extension
+**Good** (`verify-diff/SKILL.md` `## Workflow` § Step 5):
+```markdown
+- **auto-derive mode**: emit the aggregate schema defined in `## Auto-derive mode` § A3 (5-value `status` enum including `partial`, plus the per-skill nesting).
+
+`partial` is **auto-derive-only** and is never emitted by the explicit-args mode contract — existing callers wired to the explicit-args 4-value enum (e.g. `dev-workflow-triage`'s (d) verdict parser) will not see it.
+```
+（新 mode が追加した status 値は「mode-only」と明記。既存 caller の 4-value enum 互換性を契約として守る）
+**Bad:**
+```markdown
+- 全ての mode で `status` ∈ {`converged`, `unresolved`, `skipped`, `conflict`, `partial`} を emit する。
+```
+（既存 caller の switch 文が `partial` を取りこぼす dead code path に入り、沈黙落ちが起きる）
+
+### Multi-target safety-rail の pre-check before global revert
+**Good** (`verify-diff/SKILL.md` `A2 § Per-iter loop semantics` (b) sub-case 5 and (c) Scope rail):
+```markdown
+(b) sub-case 5 apply edits the file named by `suggested_edits[i].file`. **Before each `Edit`**, verify `suggested_edits[i].file ∈ F` (the per-skill `files` set); if not, record the path in an `out_of_scope` list and skip the entry without calling `Edit` (no working-tree write occurs, so no revert is needed for that entry — see (c) Scope rail).
+
+(c) Scope rail (per-skill, judgment annotation): each per-skill dispatch is an independent executor, and (b) sub-case 5's pre-check already prevents writes outside `F`. After the apply phase, if `out_of_scope` is non-empty, ... emit the per-skill verdict with `status: "conflict"`, `reason: "scope violation"`, `reverted_paths: out_of_scope`. No `git checkout HEAD --` runs because no offending write actually landed (the pre-check skipped them); `reverted_paths` reports the rejected paths for caller-visibility. ... This design avoids the multi-skill collateral-damage failure mode where a global `git checkout HEAD -- <sibling-path>` would wipe a sibling skill's already-landed edits.
+```
+（pre-check で out-of-scope path を `Edit` 前に skip → 実 write 無し → `git checkout` 不要。`reverted_paths` は informational で実 revert は走らない）
+**Bad:**
+```markdown
+(b) For each `suggested_edits[i]`, call `Edit(file)` directly.
+(c) After apply, for any path written outside the per-skill `files` set, run `git checkout HEAD -- <path>` to revert.
+```
+（multi-target loop で T1 の executor が T2 の path に edit を返した場合、`git checkout` が T2 で既に landing 済みの sibling-target edits を wipe する。pre-check が無いと collateral damage path が開く）
+
+### project-local skill の version-bump 適用範囲
+**Good** (code review finding triage):
+```markdown
+Finding N-4: "verify-diff の version bump と CHANGELOG entry が抜けている。リリース運用ルールに従ってペア bump すべき。"
+
+Reject 理由: `verify-diff` は `.claude/skills/` 配下の project-local skill であり、`marketplace.json` の `plugins[]` に entry が無い（`grep -c '"name": "verify-diff"' .claude-plugin/marketplace.json` で確認）。`plugin.json` も持たない。version bump / CHANGELOG ペア bump ルールは bundle 配布対象（`dev-workflow` / `ask-peer` / `extract-rules` / `rules-review`）にのみ適用される。
+```
+（finding の対象スキルが project-local かどうかを marketplace.json で確認してから reject）
+**Bad:**
+```markdown
+Finding N-4 を accept: 「リリース運用ルールに従って version bump と CHANGELOG entry を追加する」ですべての skill 改修に対応する。
+```
+（project-local skill にまでルールを過剰適用すると、運用しない version 番号や entry が積み上がる。適用範囲を marketplace.json 登録有無で線引きすべき）
