@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-05-03
+
+### dev-workflow v1.34.7 / dev-workflow-bundle v1.34.7
+
+- fix(dev-workflow): add post-Critical-fix class-level extension audit to Step 8 iteration loop (auto-triage #12)
+  - Category: ambiguity; Step 8 step 3 had no explicit instruction to scan the rest of the diff for instances of the same defect class after a Critical-severity fix, leaving fixes scoped to the single named instance even when the class spanned the diff. Added an inline self-audit bullet sequenced before the modified-vs-rejected branches, with same-defect-class characterization (same operation / broken assumption / side-effect pattern) and concrete examples in parentheses.
+- fix(dev-workflow): augment plan-format Step 2 self-check with promotion cues for buried Decisions (auto-triage #12)
+  - Category: wrong-default; The buried-decisions checkbox previously gave no concrete cue for spotting a Design-buried judgment, so author self-check rarely caught what Step 3 external review later flagged. Added a closed-list of three promotion cues (why-X-over-Y / fixed-value-or-timing rationale, new enum without per-member necessity, (a)+(b)-passing choice missing an Alternative line) that operationalize the (a)+(b) criterion at detection time.
+
 ## 2026-05-02
 
 ### dev-workflow v1.34.6 / dev-workflow-bundle v1.34.6
