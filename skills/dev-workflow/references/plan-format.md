@@ -96,7 +96,10 @@ If the current subtask has no in-scope decisions, use the Resume-mode fixed sent
 After the Simplicity self-audit in Step 2, run this check on the plan. Fix any failures before Step 3.
 
 - [ ] Every Decisions item passes the (a)+(b) criterion — if in doubt, drop it to Design.
-- [ ] No choice that qualifies under (a)+(b) is buried inside Design instead of surfaced in Decisions.
+- [ ] No choice that qualifies under (a)+(b) is buried inside Design instead of surfaced in Decisions. **Promotion cues** — any one is sufficient to flag a Design passage as a Decisions candidate:
+  - Design answers a "why X over Y" question or a "why this specific value / boundary / timing" question, but Decisions has no corresponding item.
+  - The plan introduces a new enum / fixed-value set, but Decisions does not record that each member is necessary and non-overlapping with the others.
+  - A choice that passes the (a)+(b) criterion appears with no Alternative line (or no one-line rejection reason) — promote the alternative analysis into a Decisions item rather than leaving it as Design prose.
 - [ ] If executing a subtask (state file active): Decisions does not re-surface subtask-boundary questions.
 - [ ] No section appears outside the enumerated template (Overview, Decisions, Design, Test plan, optionally Risks / Unknowns) — added "meta" sections such as introductions, methodology notes, or recap blocks belong inside Design or should be dropped entirely.
 
