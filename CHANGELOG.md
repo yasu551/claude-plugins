@@ -2,6 +2,11 @@
 
 ## 2026-05-05
 
+### dev-workflow v1.34.9 / dev-workflow-bundle v1.34.9
+
+- fix(dev-workflow): add Step 3 Plan Review return-point no-stall reminder mirroring Step 8 (auto-triage #13)
+  - Category: missing-branch; Step 3's iteration loop lacked the inline `Return-point no-stall reminder` bullet that Step 8 already carries, so the no-stall discipline only fired via the abstract `§ No-Stall Principle` section, not at the decision moment. Added a sibling-mirrored reminder that enumerates reviewer outcomes as a closed-list and names case-specific next actions, with stable cross-reference to `§ No-Stall Principle`.
+
 ### dev-workflow v1.34.8 / dev-workflow-bundle v1.34.8
 
 - feat(dev-workflow): add user-gate summary preamble convention to Step 4 / Step 7.5 / Step 8
