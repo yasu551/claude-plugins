@@ -96,7 +96,10 @@ If the current subtask has no in-scope decisions, use the Resume-mode fixed sent
 After the Simplicity self-audit in Step 2, run this check on the plan. Fix any failures before Step 3.
 
 - [ ] Every Decisions item passes the (a)+(b) criterion — if in doubt, drop it to Design.
-- [ ] No choice that qualifies under (a)+(b) is buried inside Design instead of surfaced in Decisions.
+- [ ] No choice that qualifies under (a)+(b) is buried inside Design instead of surfaced in Decisions. **Promotion cues** — any one is sufficient to flag a Design passage as a Decisions candidate:
+  - Design answers a "why X over Y" question or a "why this specific value / boundary / timing" question, but Decisions has no corresponding item.
+  - The plan introduces a new enum / fixed-value set, but Decisions does not record that each member is necessary and non-overlapping with the others.
+  - A choice that passes the (a)+(b) criterion appears with no Alternative line (or no one-line rejection reason) — promote the alternative analysis into a Decisions item rather than leaving it as Design prose.
 - [ ] If executing a subtask (state file active): Decisions does not re-surface subtask-boundary questions.
 - [ ] No section appears outside the enumerated template (Overview, Decisions, Design, Test plan, optionally Risks / Unknowns) — added "meta" sections such as introductions, methodology notes, or recap blocks belong inside Design or should be dropped entirely.
 
@@ -138,3 +141,42 @@ Rendering conventions for the variants below:
 > No user decisions required (subtask scoped — boundaries approved in prior Step 1.5). Approve if the detailed design within this subtask looks reasonable.
 
 Pick exactly one variant and use its literal text verbatim — do not concatenate variants, do not reword the sentence content.
+
+## User-gate summary preamble
+
+Each user-judgment gate that presents structured content (a plan body, a remaining-violations list, an unresolved-findings list) emits a short summary preamble at the top of the user-facing output — above any existing lead-in (e.g. the Step 4 guidance line) and above the structured content. The preamble names the *shape* of the situation (count, categories, what the gate is asking); it does not paraphrase, summarize, or re-list the structured content.
+
+**Applies to:**
+
+- Step 4 plan approval
+- Step 7.5 persistent-violations decision
+- Step 8 unresolved-findings decision
+
+The other user-gates listed in `SKILL.md` § No-Stall Principle (Step 1.5 dialogues, Step 7 scope-drift stop, Completion subtask PR URL prompt) do not emit a preamble — their structured content is either a single short prompt or already self-explanatory, and a 3–5 item summary above them would be padding noise.
+
+**Format constraints (closed list):**
+
+- Bulleted list, 3–5 items, each one sentence.
+- Technical jargon pairs the localized phrasing with the original technical term in parentheses on first use within the preamble (e.g. `品質ゲート（check_commands / Step 7.5）` for `language: ja`, `quality gate (check_commands / Step 7.5)` for `language: en`). When the localized phrasing and the original technical term coincide (typically under `language: en` for English-origin jargon), pair the term with its identifying handle instead (e.g. `Step 7.5 (Rules Compliance Review)`, `rules-review (the rules-compliance reviewer skill)`) so the parenthetical still adds disambiguating information.
+- Quoted heading anchors from rule files or other source files (e.g. a rule's section heading referenced from the preamble) are kept verbatim regardless of the resolved `language` — they are file-internal identifiers, not localizable prose.
+- Output language follows the resolved `language` (see `SKILL.md` § Configuration; default `ja`).
+- Mark the boundary between preamble and the rest of the output with a bold lead-in placed at the top of the preamble, above the first bullet (e.g. `**Summary**` — the lead-in text itself is localized to follow the resolved `language`). A fenced section is an acceptable alternative but is redundant when a bold lead-in is present — do not emit both.
+
+**Content slots (per gate):**
+
+- **Step 4 plan approval**:
+  - Required: `goal` / `verification approach` (2 items by default).
+  - Optional: `Decisions` (when not the empty fixed-sentence variant) / `known risks` (when the Risks section is present) / primary affected files (sourced from the plan body's Overview Scope's modified/added items only — exclude out-of-scope items, compressed into one sentence). When 2+ Optional slots qualify, fill in plan-body order: Decisions → Risks → affected files.
+  - Affected-files promotion: 2 Required + ≥1 qualifying Optional already meets the 3-item lower bound, so promotion fires only when Decisions and Risks are both empty (0 qualifying Optional) — promote affected files to Required in that case so the preamble still hits the lower bound.
+- **Step 7.5 persistent-violations decision**:
+  - Required: how many violations remain / **rule categories** (e.g. categories surfaced by `rules-review` such as the type-safety / immutability rules under `.claude/rules/languages/`, or the distribution rules under `.claude/rules/project.rules.md`) / what decision is asked.
+  - Optional: why auto-fix did not resolve (only when an auto-fix attempt was made and recorded).
+- **Step 8 unresolved-findings decision**:
+  - Required: how many findings remain / **review categories** (correctness / conventions / simplicity — the same three categories the reviewer skill organizes findings under) / what decision is asked.
+  - Optional: why they could not be resolved or rejected (only when the reasons are non-uniform across the remaining findings).
+
+Each gate's Optional slot conditions are independent — do not import Step 8's `non-uniform reasons` constraint into Step 7.5 (Step 7.5's Optional triggers on `auto-fix attempted and recorded` regardless of uniformity), or vice versa.
+
+**Omission condition:**
+
+When the structured content has only one item (a single remaining violation in Step 7.5, or a single unresolved finding in Step 8), the preamble SHOULD be omitted — a 3–5 item preamble above a single concrete item is padding noise that duplicates what the item itself states. The Step 4 preamble always has ≥ 3 items by construction, so this omission does not apply to Step 4. Do not announce the omission in the user-facing output (e.g. an "preamble omitted because only one item" line) — the announcement itself is padding noise; present the single concrete item directly.

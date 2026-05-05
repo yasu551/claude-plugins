@@ -594,6 +594,72 @@ Each iter, the executor returns a new `inferred_intent`. Use the latest one in t
 ```
 （multi-target loop で T1 の executor が T2 の path に edit を返した場合、`git checkout` が T2 で既に landing 済みの sibling-target edits を wipe する。pre-check が無いと collateral damage path が開く）
 
+### i18n 機能 documenting の英語 meta-prose と paired bilingual sample 分離
+**Good** (`skills/dev-workflow/references/plan-format.md` § User-gate summary preamble):
+```markdown
+- Technical jargon pairs the localized phrasing with the original technical term in parentheses on first use within the preamble (e.g. `品質ゲート（check_commands / Step 7.5）` for `language: ja`, `quality gate (check_commands / Step 7.5)` for `language: en`).
+- Output language follows the resolved `language` (see `SKILL.md` § Configuration; default `ja`).
+```
+（meta-prose `Technical jargon pairs ...` は英語、bilingual sample は `language: ja` / `language: en` の paired demonstration として括弧書き内に併記。「実装物は英語で記述する」ルールに整合し、runtime の挙動も読者が読み取れる）
+**Bad:**
+```markdown
+- 専門用語は日本語と原語をセットで記載（例: `品質ゲート（check_commands / Step 7.5）`）
+```
+（Japanese meta-prose は「実装物は英語で記述する」ルールに違反する。さらに Japanese-only の sample は rules-review で `borderline / low-confidence` flag され、後追い triage で 1 cycle 余分にかかる）
+
+### 配布性ルール scope clarification: same-bundle self-reference
+**Good** (rules-review / code review finding triage):
+```markdown
+Finding N-3: 「`dev-workflow/references/plan-format.md` の `Step 4 / Step 7.5 / Step 8` という bundle 内部固有の節名が主文に埋め込まれており、§ SKILL.md の配布性 ルールに違反する可能性がある」
+
+Reject 理由: `Step 4 / Step 7.5 / Step 8` は同一 SKILL.md（`skills/dev-workflow/SKILL.md`）内で defined されている self-reference であり、配布性ルールが禁ずる「適用文脈固定の語彙（skill 開発、特定 framework 等の out-of-bundle vocabulary）」とは別レイヤー。同 bundle 内 sibling skill 名（`rules-review` / `simplify` / `extract-rules` 等）の参照も同様に違反ではない。
+```
+（同 SKILL.md 内 self-reference / 同 bundle 内 sibling skill name reference は配布性違反ではないことを明記して reject）
+**Bad:**
+```markdown
+Finding N-3 を accept: 「Step 4 / Step 7.5 / Step 8」を一般化した呼称（"the user-judgment gate", "the rules compliance step", "the code review step"）に書き換える
+```
+（self-reference まで一般化すると SKILL.md 内の cross-section reference が読みづらくなり、可読性とトレーサビリティが下がる。配布性ルールは out-of-bundle vocabulary を防ぐためのもので、self-reference には適用しない）
+
+### 同 SKILL.md 内 sibling iteration loop の return-point reminder symmetric coverage
+**Good** (`skills/dev-workflow/SKILL.md` Step 3 Plan Review iter loop末尾 + Step 8 Code Review iter loop末尾、両方に同型 reminder):
+```markdown
+### Step 3: Plan Review
+...
+   **Return-point no-stall reminder**: At each iteration boundary (regardless of reviewer outcome — findings reported, "No actionable findings", any non-error result), the next action — the next iteration's reviewer dispatch when more iteration items remain, or the Step 4 transition when this was the last iteration or "No actionable findings" was returned, or the Step 7 / Step 7.5 re-run when the plan was modified — must be issued in the **next tool call**. See `§ No-Stall Principle`.
+
+### Step 8: Code Review
+...
+   **Return-point no-stall reminder**: At each iteration boundary (regardless of reviewer outcome — findings reported, "No actionable findings", any non-error result), the next action — the next iteration's reviewer dispatch when more iteration items remain, or the Step 9 transition when this was the last iteration or "No actionable findings" was returned, or the Step 7 / Step 7.5 re-run when code was modified — must be issued in the **next tool call**. See `§ No-Stall Principle`.
+```
+（両 iter loop に同型 reminder を配置、closed-list 形式・next tool call 明示・`§ No-Stall Principle` 安定参照の 3 要素で structural 整合）
+**Bad** (Step 8 にだけ reminder、Step 3 には無い):
+```markdown
+### Step 3: Plan Review
+1. Mark iteration item as `in_progress`. Call reviewer skill.
+2. If "No actionable findings": mark completed and skip remaining.
+3. Otherwise: apply / reject and continue to next iteration.
+
+### Step 8: Code Review
+...
+   **Return-point no-stall reminder**: At each iteration boundary (regardless of reviewer outcome ...
+```
+（Step 3 iter boundary で stall が再発する。`Skill(ask-peer)` 戻り後にユーザーが `なぜ止まっているの？` と問うパターンが繰り返される。reminder は同型 sibling loop 間で symmetric coverage が必要）
+
+### Free-form prose verdict reviewer skill の stall リスク認識
+**Good** (新規 reviewer 系 sub-skill 追加 / stall 観測時の判断):
+```markdown
+判断: `ask-peer` の plan review verdict は `## Critical / ## Major / ## Minor` の Severity 階層で構造化された Markdown だが、fenced JSON の return contract を持たない。`Skill(ask-peer)` 戻り後にユーザー判断点で stall が観測された経緯から、free-form Markdown verdict は `skill-review` 等と同じ stall リスクを抱える。
+
+対処: ask-peer SKILL.md 末尾に fenced JSON return contract（`{ "status": "no-actionable-findings" | "findings-reported", "severity_counts": { "critical": N, "major": N, "minor": N }, ... }` 形式）の導入を検討。orchestrator 側（dev-workflow Step 3 / Step 8）で parse → 次 action の機械フローを組めるようにする。
+```
+（構造化されているように見える Markdown verdict も fenced JSON の return contract が無ければ stall リスクは同じ、という認識）
+**Bad:**
+```markdown
+判断: `ask-peer` の verdict は Severity 階層で構造化されているので `skill-review` のような stall リスクは無い。orchestrator 側の return-point reminder で十分。
+```
+（"構造化されているように見える Markdown" と "機械的 parse 可能な fenced JSON" を混同している。reminder は背景文脈に退き、決定の瞬間に active prompt として参照されないため、prose verdict が turn 全体を消費する stall は再発する）
+
 ### project-local skill の version-bump 適用範囲
 **Good** (code review finding triage):
 ```markdown
