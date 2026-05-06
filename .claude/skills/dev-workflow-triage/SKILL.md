@@ -1,7 +1,7 @@
 ---
 name: dev-workflow-triage
 description: Triage open issues in the dev-workflow-bundle retrospective repo. Read each open issue, judge each Finding (accept / reject), apply accepted fixes to the bundle skills (dev-workflow, ask-peer, extract-rules, rules-review), post a triage comment, and close the issue. Designed for non-interactive routine execution (no plan mode, no user prompts) on Claude Code on the Web.
-allowed-tools: Read, Edit, Write, TodoWrite, Skill(verify-diff), Skill(skill-review), Skill(publicity-review), Bash(gh auth status), Bash(gh --version), Bash(gh issue list *), Bash(gh issue comment *), Bash(gh issue close *), Bash(git diff *), Bash(git add *), Bash(git commit *), Bash(git reset), Bash(git checkout HEAD -- *), Bash(git rev-parse *), Bash(git config --get *), Bash(jq *), Bash(mkdir -p *)
+allowed-tools: Read, Edit, Write, TodoWrite, Skill(verify-diff), Skill(skill-review), Skill(publicity-review), Bash(gh auth status), Bash(gh --version), Bash(gh issue list *), Bash(gh issue comment *), Bash(gh issue close *), Bash(git diff *), Bash(git add *), Bash(git commit *), Bash(git reset), Bash(git checkout HEAD -- *), Bash(git rev-parse *), Bash(git config --get *), Bash(git for-each-ref *), Bash(git symbolic-ref *), Bash(git switch *), Bash(git branch *), Bash(date *), Bash(jq *), Bash(mkdir -p *)
 ---
 
 # Dev Workflow Triage
@@ -34,6 +34,14 @@ Concretely, the recognized return points are the (d) `Skill(verify-diff)` empiri
 **(d-loop) outer iteration boundaries are non-stalling.** When `(d-loop)` (see § 3.4 Apply accepted Findings) re-enters the next outer iter (`k` → `k+1`) after `(d3)`'s return, the next tool call must directly issue iter `k+1`'s `(d)` `Skill(verify-diff)` dispatch — never an interstitial summary or "let me decide whether to continue" turn. Conversely, when the loop terminates (early-exit on zero edits, callee-abort downgrade, or `k=3` reached), the next tool call must directly issue `(f)` Scope check + stage (or skip to next Finding's `(a)` on the conflict-downgrade path). Both transitions follow the same closed-list shape as the (d)/(d2)/(d3) return-point reminders.
 
 **Fatal tool-level errors are out of scope** — irrecoverable `Edit` / `Read` / `Bash` failures halt with a diagnostic regardless.
+
+## Triage branch isolation
+
+Each run creates its own branch named `triage-YYYYMMDD-HHMMSS` so per-Finding commits and the Step 3.7 release-bookkeeping commit do not land directly on `main` (or whatever branch the operator was on at run start). The base for the new branch is the **most recent existing `triage-*` branch** — if a prior triage branch is still open (unmerged) the new run continues from where it left off, so two runs against partially-overlapping issue sets never produce conflicting `marketplace.json` / `CHANGELOG.md` edits at PR-merge time. With no prior triage branches the base is the branch the operator was on (typically `main`).
+
+**Eager creation, lazy cleanup.** The branch is created in Step 1 Pre-flight regardless of whether any Findings will be accepted. A 0-commit run (no open issues, every Finding rejected, every accept downgraded to `conflict`, etc.) is auto-cleaned in Step 4: switch back to `original_branch` and `git branch -D <triage_branch_name>`. Lazy creation (deferring the `git switch -c` until the first commit) was rejected because `§ 3.4 Apply accepted Findings` sub-step (g) and `§ Step 3.7 Release bookkeeping` sub-step (j) each have their own commit-failure recovery paths (`git reset` + `git checkout HEAD -- <paths>`); injecting branch-creation hooks into both sites would multiply the recovery branches without removing the cleanup obligation. Eager + single-site cleanup keeps the control flow flat.
+
+**Same-day re-run by design stacks.** The 2nd run of a single day picks the 1st run's `triage-YYYYMMDD-HHMMSS` branch as its base because refname sort = chronological. Per-run isolation (each run still has its own branch) is preserved while the chain reflects the review history. The single-writer constraint (don't run two `dev-workflow-triage` invocations in parallel against the same target repo) still applies — concurrent runs sharing the same latest base would conflict at PR-merge time on `marketplace.json` / `CHANGELOG.md`. The same stacking applies when `original_branch` itself is a `triage-*` branch (re-running on a previously-created triage branch); see Step 1 Pre-flight and § Auto-cleanup of empty triage branch for the bookkeeping.
 
 ## Stop hook structural conflict (Claude Code on the Web)
 
@@ -84,6 +92,16 @@ fix(<target-skill>): <Finding 1-line summary> (auto-triage #<issue-N>)
 - Run `git diff --quiet` and `git diff --cached --quiet`. Either non-zero ⇒ abort with "working tree is dirty — uncommitted WIP detected" (prevents folding user WIP into a triage commit)
 - Run `git config --get user.email` and `git config --get user.name`. Either empty ⇒ abort with "git identity not configured" (fresh CI / routine containers often lack this)
 - Detect Web-environment Stop hook (observability only, never abort): run `jq -r '[.hooks.Stop[]?.hooks[]?.command] | join(" ")' ~/.claude/settings.json 2>/dev/null || true`. If the output contains `stop-hook-git-check.sh`, set internal flag `stop_hook_present=true` for the Step 4 summary. File missing / parse failure / `hooks.Stop` absent ⇒ silent skip (flag stays unset). The trailing `|| true` ensures the pipeline status is benign under `set -e`. See `§ Stop hook structural conflict` for what the flag signals to the operator
+- Reject detached HEAD: run `git symbolic-ref -q HEAD >/dev/null`. Non-zero ⇒ abort with summary "detached HEAD — checkout a branch before running" (the cleanup path's `git switch "$original_branch"` cannot return to a detached state, so the run must start from a named branch)
+- Create the per-run triage branch (eager — see `§ Triage branch isolation` for the design rationale):
+  - `original_branch = $(git rev-parse --abbrev-ref HEAD)` — captured for end-of-run cleanup so a 0-commit run can return to where the operator started, including the case where `original_branch` itself matches `triage-*` (re-running on a triage branch stacks the new branch on top with no special-case logic). The detached-HEAD case is already rejected by the prior pre-flight check, so `--abbrev-ref` is guaranteed to return a real branch name here
+  - `triage_branch_name = "triage-$(date +%Y%m%d-%H%M%S)"`
+  - `triage_branch_base = $(git for-each-ref --sort=-refname 'refs/heads/triage-*' --format='%(refname:short)' | head -n1)`. The glob pattern is **single-quoted** because the `Bash` tool runs zsh, where the default `nomatch` option fails the command with `no matches found` if the pattern is unquoted and no branch exists. Single-quoting passes the literal pattern to `git for-each-ref`, which returns empty stdout on no match. Refname sort is correct here because the branch-name format `triage-YYYYMMDD-HHMMSS` encodes the creation timestamp, so `--sort=-refname` gives chronological order; the alternatives `--sort=-creatordate` / `--sort=-committerdate` return the **tip commit's** date instead of the branch's creation date and would mis-rank a fresh branch cut from an old base
+  - If `triage_branch_base` is empty (no prior `triage-*` branches), fall back to `triage_branch_base = "$original_branch"`
+  - `git switch -c "$triage_branch_name" "$triage_branch_base"`. Non-zero exit ⇒ abort with summary `branch creation failed (base=<triage_branch_base>)` (covers e.g. `git switch` < 2.23, base ref unexpectedly missing, working tree blocked despite the earlier `git diff --quiet` check). Same fatal-abort shape as the other Step 1 failures
+  - On success, initialize `triage_commit_count=0`. The counter is incremented **only on zero-exit `git commit`** at `§ 3.4 Apply accepted Findings` sub-step (g) and `§ Step 3.7 Release bookkeeping` sub-step (j); a failed commit (pre-commit hook rejection, etc.) leaves it unchanged. Step 4 auto-cleanup checks `triage_commit_count == 0` to decide whether to delete the now-empty branch (the abort path above exits the run before Step 4 ever runs, so a separate "branch active" flag is redundant — reaching Step 4 already implies a successfully-created branch)
+- Resolve `current_version` once for the run (cached and reused by Step 3.3's Version-aware judgment for every Finding): run `current_version=$(jq -r '(.plugins[] | select(.name == "dev-workflow") | .version) // "unknown"' .claude-plugin/marketplace.json 2>/dev/null)`, then `[ -z "$current_version" ] && current_version=unknown`. The `// "unknown"` jq alternative handles missing entry (empty stream) and entry-without-version (`null`); the post-pipeline `-z` guard handles `jq` itself failing (missing/malformed `marketplace.json`). Hoisting this out of the per-issue / per-Finding hot path keeps the routine N×M `jq` invocations from accumulating on issue sets that touch every Finding through the stale-issue branch
+- Read `CHANGELOG.md` once and cache its contents for Step 3.3's Reject #7 leg (i) lookup. The same content serves every Finding that enters the stale-issue branch, so re-reading per Finding is wasted work
 
 After all pre-flight checks pass, register the **Workflow Phase Rows** in `TodoWrite` as a single call:
 
@@ -128,6 +146,7 @@ Extract Finding records. The producer (`skills/dev-workflow/references/self-retr
 - Heading: line matching `^### Finding \d+$`
 - Field labels (one per line, bold + colon + value): `^\*\*Target skill:\*\*\s*(.+)$`, `^\*\*Category:\*\*\s*(.+)$`, `^\*\*Description:\*\*\s*(.+)$`, `^\*\*Suggested fix direction:\*\*\s*(.+)$`
 - Trailer: `^Findings: (\d+)$` near the end
+- **Producer version line (optional)**: between the `# dev-workflow-bundle retrospective (auto-generated)` header and the first `### Finding 1`, match `^\*\*Producer version:\*\* dev-workflow v(\d+\.\d+\.\d+)$`. Capture the matched group into the per-issue value `producer_version`. **Absent** (no matching line — backward-compat with issues created before the producer added the line) and **malformed** (e.g. `**Producer version:** dev-workflow vfoo` or a non-3-tuple value) both fall back to `producer_version = "unknown"`. Missing or malformed Producer version is **not** a parse-error condition — Step 3.3's Version-aware judgment treats `unknown` as "older than everything" so the stale-issue reject path engages safely
 
 Classify the **whole issue** as `parse-error` (jump to Post triage comment; continue to Close decision, where the close rule "close only if every Finding is accept/reject" leaves the issue open) if any of:
 
@@ -139,6 +158,32 @@ Classify the **whole issue** as `parse-error` (jump to Post triage comment; cont
 #### 3.3 Judge each Finding
 
 For each Finding, read `skills/<target>/SKILL.md` first; additionally read `skills/<target>/references/<file>.md` on demand when the Description or Suggested fix direction clearly points at content outside SKILL.md (e.g. names the file, names a heading/section that belongs to a reference, or describes behavior documented in a reference). Apply `references/triage-criteria.md` to decide `accept` vs `reject`. Store decision + reasoning in memory. Do **not** edit yet.
+
+**Version-aware judgment** (apply alongside the standard checklist; sources `references/triage-criteria.md` § Reject #7):
+
+Compare the `producer_version` captured in `§ 3.2 Parse body` against the `current_version` resolved once at Step 1 Pre-flight (cached for the whole run). SemVer comparison parses `\d+\.\d+\.\d+` into an integer 3-tuple and compares lexicographically; the literal `unknown` is treated as "older than everything" so the stale-issue branch engages whenever either side cannot be parsed.
+
+- `producer_version == current_version`: standard checklist only — no extra step
+- `producer_version < current_version`, OR `producer_version == "unknown"`, OR `current_version == "unknown"`: apply `Reject #7` (stale-issue path) **alongside** the standard checklist. Both legs (i)+(ii) must hold to reject:
+  - **(i)** Locate version subsections in the `CHANGELOG.md` content cached at Step 1 Pre-flight, in the half-open range `(producer_version, current_version]` — **producer-exclusive, current-inclusive** (a fix that landed in `current_version` itself counts as "addressed" for this Finding; the producer side is excluded because the producer was already at that version when it emitted the issue, so any fix in `producer_version` cannot post-date the issue). When either side is `unknown`, scan all entries instead. At least one fix entry in that range must name this Finding's `<target-skill>` in its subject (e.g. `- fix(dev-workflow): ...` for a `<target-skill> = dev-workflow` Finding)
+  - **(ii)** `Read` the current `skills/<target>/SKILL.md` (and the `references/*.md` files cited by the Finding's Description) and verify the described concern is **no longer reproducible** in the current file state. Cite the specific passage that demonstrates non-reproducibility in one line (e.g. `SKILL.md § 3.6 Close decision now lists explicit reminder #1 / #2 — Finding's "missing per-issue close reminder" no longer reproduces`)
+  - **Either-leg doubt → fall through to the standard checklist.** Reject #7 requires affirmative judgment on **both** (i) and (ii); on doubt about either leg, do not reject under #7 — let the standard checklist run, which may still accept the Finding or reject it under another criterion. This asymmetric default protects against false-rejecting Findings that target subtly different problems in the same skill region
+  - When both legs hold, set the Finding's reject `reason` to `Already addressed (producer_version <X.Y.Z> < current_version <Y.Z.W>; CHANGELOG entry: <token>; SKILL.md cite: <quoted passage>)`. The reason string is stored on the per-Finding reasoning record and surfaced via the existing Step 3.5 Post triage comment template — no new field is introduced
+- `producer_version > current_version` (the local `marketplace.json` is older than the producer that emitted the issue — unusual, suggests this routine is running on a stale clone): standard checklist only, but append `(note: producer_version newer than local current_version — local marketplace.json may be stale)` to whichever reason string the standard checklist produces, so the per-Finding execution log surfaces the inversion
+
+**Interaction with sibling Reject criteria** (resolves the overlap between Reject #7 and Reject #1 / #2 in `references/triage-criteria.md`):
+
+- **Reject #1 (Already addressed in current file)** overlaps Reject #7 leg (ii) by construction — both require affirmative judgment that the Finding's concern no longer reproduces. When the version-aware path is engaged (`producer_version != current_version`, or either side is `unknown`), **prefer Reject #7** because it carries richer evidence (CHANGELOG entry token + SKILL.md cite, vs. Reject #1's bare "no longer reproduces"). On Reject #7 fall-through, the Reject #1 disposition depends on **which trigger** caused the fall-through (table below — leg (i) doubt / failure shares the leg-(ii)-result row because Reject #1's premise is driven by leg (ii)'s judgment alone):
+
+  | Fall-through trigger | leg (i) state | leg (ii) state | Reject #1 disposition |
+  |---|---|---|---|
+  | (1) leg (i) failed (no matching CHANGELOG entry in `(producer_version, current_version]`) + leg (ii) holds affirmatively | failed | hold (affirmative non-reproduction) | **may fire** — cite leg (ii)'s passage as Reject #1's reason; leg (ii)'s judgment is independent of the CHANGELOG range gate |
+  | (2) leg (ii) doubt (regardless of leg (i)) | hold / failed / doubt | doubt | **must NOT fire** — the same doubt that blocked leg (ii) blocks Reject #1's affirmative-non-reproduction premise |
+  | (3) leg (ii) failed affirmatively (current SKILL.md still reproduces) | hold / failed / doubt | failed (affirmative reproduction) | **must NOT fire** — Reject #1's premise is the inverse of leg (ii)'s affirmative reproduction; the concern is still present |
+  | (4) leg (i) doubt + leg (ii) holds affirmatively | doubt | hold (affirmative non-reproduction) | **may fire** on leg (ii) alone (same path as trigger (1)) — leg (i) doubt does not propagate to Reject #1 because Reject #1 has no CHANGELOG-range premise |
+
+  After Reject #1 disposition is settled, the standard checklist continues evaluating Reject #2–#6 and the Accept-4 conditions regardless of whether Reject #1 fired.
+- **Reject #2 (out-of-scope target in description)** is orthogonal — it judges target/description alignment, not version state — and runs **independently** alongside Reject #7. A Finding can be rejected under either, whichever fires first when both apply; standard-checklist evaluation order from `references/triage-criteria.md` (Reject #1 → #2 → … → #6) is unchanged, with Reject #7 evaluated alongside #1 per the bullets above.
 
 #### 3.4 Apply accepted Findings (sub-flow (a)-(g) per Finding)
 
@@ -258,7 +303,7 @@ For each accepted Finding (the per-Finding memory record described above is upda
   )"
   ```
 
-  On zero exit: capture `git rev-parse HEAD` for the summary, and set `record.commit = <hash>` and `record.disposition = accept`. On non-zero (typically a pre-commit hook rejection): run `git reset` + `git checkout HEAD -- <paths>` to return to a clean tree, downgrade to `conflict` (`record.disposition = conflict`, `record.commit = —`), record `commit-failed`, continue
+  On zero exit: capture `git rev-parse HEAD` for the summary, set `record.commit = <hash>` and `record.disposition = accept`, and increment `triage_commit_count` by 1. On non-zero (typically a pre-commit hook rejection): run `git reset` + `git checkout HEAD -- <paths>` to return to a clean tree, downgrade to `conflict` (`record.disposition = conflict`, `record.commit = —`), record `commit-failed`, continue without incrementing `triage_commit_count`
 
 `references/triage-criteria.md` § edge-case dispatch table lists the same dispositions in table form — useful as a quick reference; the procedural prose above is authoritative for ordering.
 
@@ -364,9 +409,9 @@ COMMIT_MSG_END
 
 The trailing `(auto-triage YYYY-MM-DD)` in the subject distinguishes same-day re-runs in `git log`.
 
-On non-zero exit (typical case: a pre-commit hook rejection), recover with `git reset` + `git checkout HEAD -- .claude-plugin/marketplace.json CHANGELOG.md`, record `release-bookkeeping=failed (commit error)`, and proceed to Step 4.
+On non-zero exit (typical case: a pre-commit hook rejection), recover with `git reset` + `git checkout HEAD -- .claude-plugin/marketplace.json CHANGELOG.md`, record `release-bookkeeping=failed (commit error)`, and proceed to Step 4 without incrementing `triage_commit_count`.
 
-On zero exit, capture `git rev-parse HEAD` as the bookkeeping commit hash for the Step 4 summary line `release-bookkeeping=<hash>`.
+On zero exit, capture `git rev-parse HEAD` as the bookkeeping commit hash for the Step 4 summary line `release-bookkeeping=<hash>`, and increment `triage_commit_count` by 1.
 
 After this step terminates (any branch), apply the following boundary reminder before proceeding to Step 4:
 
@@ -378,7 +423,7 @@ Print to stdout (the only trace a routine leaves). The summary has two sections 
 
 Entry state: the `Step 4: Emit summary` row is already `in_progress` (flipped either by the Step 3.7 → Step 4 boundary reminder, or by the 0-open-issues path in Step 2). The final `completed` flip and the summary stdout output **must occur in the same tool-call burst**. See `§ No-Stall Principle` § Phase / per-issue TodoWrite transitions.
 
-**Per-Finding execution log** — one block per processed Finding in source order. Fields source from the per-Finding memory record in § Apply accepted Findings (see Notes — Record-field overwrite for terminal-iter rendering and cumulative dispatch cost observability). When the run produced zero Finding records (e.g. the 0-open-issues path, or a run where every issue ended in title-mismatch with no Findings parsed), still render the `Per-Finding execution log` heading and emit a single placeholder line `(none — 0 Findings logged)` under it before the aggregate summary. **Each field renders its written value, or `—` if the record-write point was never reached** — this rule applies uniformly across all dispositions (`accept` / `reject` / `conflict` / `parse-error`), driven by which sub-steps actually ran for that Finding, not by the disposition itself. The `verify-diff` and `publicity` lines each carry an `[iter ...]` clause that follows these cases (the orchestrator passes `Max iterations = 2` to publicity-review per § Apply accepted Findings (d3), so the publicity denominator renders as `/2`; verify-diff renders as `/3` per its own default):
+**Per-Finding execution log** — one block per processed Finding in source order. Fields source from the per-Finding memory record in § Apply accepted Findings (see Notes — Record-field overwrite for terminal-iter rendering and cumulative dispatch cost observability). When the run produced zero Finding records (e.g. the 0-open-issues path, or a run where every issue ended in title-mismatch with no Findings parsed), still render the `Per-Finding execution log` heading and emit a single placeholder line `(none — 0 Findings logged)` under it before the aggregate summary. **Each field renders its written value, or `—` if the record-write point was never reached** — this rule applies uniformly across all dispositions (`accept` / `reject` / `conflict` / `parse-error`), driven by which sub-steps actually ran for that Finding, not by the disposition itself. **Reject reasons (including the Reject #7 stale-issue 4-element cite format `Already addressed (producer_version <X.Y.Z> < current_version <Y.Z.W>; CHANGELOG entry: <token>; SKILL.md cite: <quoted passage>)`) are surfaced via the Step 3.5 Post triage comment template — the GitHub issue comment is the canonical record. They are intentionally NOT rendered in this per-Finding execution log block to keep the log scannable; render only the listed fields below.** The `verify-diff` and `publicity` lines each carry an `[iter ...]` clause that follows these cases (the orchestrator passes `Max iterations = 2` to publicity-review per § Apply accepted Findings (d3), so the publicity denominator renders as `/2`; verify-diff renders as `/3` per its own default):
 
 - `verify_diff` ∈ {`converged`, `unresolved`, `skipped`, `conflict`} (the (d) sub-step ran): render `<token> [iter <iterations_used>/3]`
 - `verify_diff` = `disabled` (the (d) sub-step was skipped because `verify_diff_disabled=true`): render `disabled [iter —]`
@@ -414,6 +459,19 @@ issue #<N> Finding <n>: <accept|reject|conflict|parse-error>
 - Failure counts: `comment-failed` / `close-failed` / `commit-failed`, with (issue#, finding#) pairs
 - `overflow=true` notice if Step 2 hit the 50-issue cap (rendered as `50-issue cap reached`)
 - `release-bookkeeping`: one of `<commit-hash>` (success), `skipped (no commits)`, `failed (version skew: dev-workflow=<v1>, dev-workflow-bundle=<v2>)`, `failed (json invalid)`, `failed (changelog edit error)`, `failed (scope leak)`, or `failed (commit error)` — sourced from Step 3.7's outcome
+- `triage-branch`: one of `<triage_branch_name> (based on <triage_branch_base>) — <N> commits` (the branch is retained for the operator to open a PR; `<N>` = `triage_commit_count` ≥ 1) or `<triage_branch_name> (based on <triage_branch_base>) — created and deleted (0 commits)` (auto-cleanup ran). Sourced from `§ Auto-cleanup of empty triage branch` below
 - `stop-hook-detected: ~/.claude/stop-hook-git-check.sh (Web env standard hook) — spurious fires during multi-subagent dispatch flow are recorded and ignored per § Stop hook structural conflict` if the Step 1 pre-flight detection set `stop_hook_present=true`. Omit the line entirely when the flag is unset (Local environment / hook absent)
+
+#### Auto-cleanup of empty triage branch
+
+Run **before** emitting the summary stdout (so the `triage-branch` line above can render the post-cleanup state). If `triage_commit_count == 0`, the run produced zero commits on the triage branch (per-Finding commits and the Step 3.7 bookkeeping commit both increment the counter, so a `0` here implies the bookkeeping step reached `skipped (no commits)`) and there is nothing to PR — clean up:
+
+- `git switch "$original_branch"`. Non-zero exit ⇒ record warning `cleanup: switch back failed (original=<original_branch>)` and skip the `git branch -D` step (deleting a checked-out branch fails anyway). Do not abort
+- `git branch -D "$triage_branch_name"`. Non-zero exit ⇒ record warning `cleanup: branch -D failed (branch=<triage_branch_name>)`. Do not abort. The `-D` (capital, hard-delete) is intentional — the branch we just created is unmerged into anything by definition; lowercase `-d` would refuse to delete it on the merged-state safety check
+- On both successful: render `triage-branch: <triage_branch_name> (based on <triage_branch_base>) — created and deleted (0 commits)` in the summary. Otherwise render the `<N> commits` form (counter is 0 but cleanup did not complete, so the branch may still exist — point the operator at it via the warning)
+
+When `triage_commit_count > 0`, do **not** run the cleanup — the branch holds at least one commit the operator wants to PR. Render the `<N> commits` form.
+
+Note: `original_branch` may itself match `triage-*` (re-running on a previously-created triage branch). Cleanup is identical — `git switch` returns to that triage branch and `git branch -D <new>` removes only the just-created empty branch. The parent triage branch survives.
 
 Always emit the summary, even on zero-activity runs — "ran but made no changes" must be distinguishable from "didn't run at all".

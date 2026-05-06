@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-05-06
+
+### dev-workflow v1.34.10 / dev-workflow-bundle v1.34.10
+
+- feat(dev-workflow): emit Producer version line in self-retrospective issue body
+  - Category: missing-branch; Retrospective issue bodies carried no record of which `dev-workflow` version produced them, leaving the triage routine unable to distinguish stale issues (already-fixed in a later release) from current ones. Added a `**Producer version:** dev-workflow v<X.Y.Z>` line directly under the body header in `references/self-retrospective.md` § 4 Assemble — resolved from `.claude-plugin/marketplace.json` via `jq` with a literal `unknown` fallback when the file or entry is missing. Consumer-side stale-issue handling (regex extract, version-aware reject path with `(i)` CHANGELOG entry + `(ii)` SKILL.md cite gates and either-leg doubt fall-through to standard checklist) lives in the project-local `dev-workflow-triage` skill, where it can evolve independently of the bundle.
+
 ## 2026-05-05
 
 ### dev-workflow v1.34.9 / dev-workflow-bundle v1.34.9

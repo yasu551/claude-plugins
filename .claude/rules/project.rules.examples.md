@@ -673,3 +673,150 @@ Reject 理由: `verify-diff` は `.claude/skills/` 配下の project-local skill
 Finding N-4 を accept: 「リリース運用ルールに従って version bump と CHANGELOG entry を追加する」ですべての skill 改修に対応する。
 ```
 （project-local skill にまでルールを過剰適用すると、運用しない version 番号や entry が積み上がる。適用範囲を marketplace.json 登録有無で線引きすべき）
+
+## Project-specific Patterns Examples
+
+### `jq` の `null` 文字列フォールバック
+**Good** (`skills/dev-workflow/references/self-retrospective.md` § 4 Assemble):
+```bash
+producer_version=$(jq -r '(.plugins[] | select(.name == "dev-workflow") | .version) // "unknown"' .claude-plugin/marketplace.json 2>/dev/null)
+[ -z "$producer_version" ] && producer_version="unknown"
+```
+（filter 内で `// "unknown"` を使い、追加で post-pipeline `-z` ガードで「ファイル不在 / `jq` non-zero exit / 空出力」を吸収する 2 段構え）
+**Bad:**
+```bash
+producer_version=$(jq -r '.plugins[] | select(.name == "dev-workflow") | .version' .claude-plugin/marketplace.json 2>/dev/null || echo unknown)
+```
+（`jq` は entry 不在時に literal `null\n` を stdout に出して **zero exit** するため `|| echo unknown` がフォーカルしない。文字列 `"null"` がそのまま下流に流れる）
+
+### detached HEAD ガード
+**Good** (`skills/dev-workflow-triage/SKILL.md` Step 1 Pre-flight):
+```bash
+if ! git symbolic-ref -q HEAD >/dev/null; then
+  abort "detached HEAD: cannot save original branch reference"
+fi
+original_branch=$(git rev-parse --abbrev-ref HEAD)
+```
+（`symbolic-ref -q HEAD` の non-zero exit を以って detached HEAD を early detect、abort で summary に理由を出す）
+**Bad:**
+```bash
+original_branch=$(git rev-parse --abbrev-ref HEAD)
+# detached HEAD だと original_branch="HEAD" になり、後段の git switch "$original_branch" が「HEAD という名前のブランチ」を探して fail
+git switch -c "$triage_branch" "$base"
+# ... 作業 ...
+git switch "$original_branch"  # detached HEAD の場合 silent fail / unexpected branch switch
+```
+（branch 操作を伴う routine スキルでは detached HEAD guard を必ず Pre-flight に置く）
+
+### `refs/heads/<glob>` の single-quote
+**Good** (`skills/dev-workflow-triage/SKILL.md` § Triage branch isolation):
+```bash
+triage_branch_base=$(git for-each-ref --sort=-refname 'refs/heads/triage-*' --format='%(refname:short)' | head -n1)
+```
+（zsh の `nomatch` option がデフォルト有効で、マッチが無いと shell が abort する。single-quote で shell 展開を防ぐ）
+**Bad:**
+```bash
+triage_branch_base=$(git for-each-ref --sort=-refname refs/heads/triage-* --format='%(refname:short)' | head -n1)
+```
+（zsh で初回走行時に `triage-*` がマッチせず `zsh: no matches found: refs/heads/triage-*` で routine が silent halt）
+
+### Run-level invariant の Pre-flight への hoist
+**Good** (`skills/dev-workflow-triage/SKILL.md` Step 1 Pre-flight):
+```markdown
+**Cache run-level invariants** (used in every per-Finding loop iteration):
+- `current_version`: resolve once via `jq -r '...' .claude-plugin/marketplace.json` (with the `// "unknown"` + `-z` guard pattern above)
+- `changelog_content`: `Read` `CHANGELOG.md` once into memory
+
+The per-Finding loop in § 3.3 references these cached values; do not re-resolve / re-Read inside the loop.
+```
+（loop に入る前に Step 1 Pre-flight に hoist し、N×M の jq / Read 累積を解消）
+**Bad** (Step 3.3 per-Finding loop 内で毎回 resolve):
+```markdown
+For each Finding:
+  current_version=$(jq -r '.plugins[] | ...' .claude-plugin/marketplace.json)
+  changelog=$(cat CHANGELOG.md)
+  ... (judgment using current_version / changelog) ...
+```
+（N Findings × M Finding-level operations で jq / Read が累積、Simplify 段階で頻出する fix 方向）
+
+### disposition enum 拡張ではなく既存 enum の厳格化
+**Good** (`skills/dev-workflow-triage/SKILL.md` § 3.3 Judge each Finding):
+```markdown
+**Reject criterion #1 (Already addressed) — strict form when `producer_version < current_version` or `unknown`**:
+Reject only if **both** legs hold (cite the evidence inline in the rejection reason):
+  (i) The CHANGELOG entries between `producer_version` and `current_version` contain a fix entry for the same `<target-skill>` matching this Finding's class;
+  (ii) The current `<target-skill>` SKILL.md / references no longer exhibit the phenomenon described in the Finding.
+If either leg has doubt, fall through to the standard checklist (do not reject).
+```
+（既存 reject #1「Already addressed」を 2-leg AND test で具体化、新 disposition value は追加しない）
+**Bad:**
+```markdown
+Add a new disposition value `already-addressed-version` to the per-Finding record schema, distinct from `rejected`.
+Mapping table updates: ... (downstream parser, aggregate counter, status enum 全部 update)
+```
+（新 enum value は downstream parser / mapping table / status enum 全部の update が必要、後方互換性も崩れる）
+
+### counter 増分は「zero exit only / 失敗 path には without incrementing 明記」
+**Good** (`skills/dev-workflow-triage/SKILL.md` § 3.4 (g) Commit):
+```markdown
+(g) Commit the staged change.
+  - Zero exit: increment `triage_commit_count` by 1.
+  - Non-zero exit: record `commit-failed` in the per-Finding record. **Do not increment `triage_commit_count`**.
+```
+（成功 / 失敗の両分岐で increment 命令を symmetric に明示）
+**Bad:**
+```markdown
+(g) Commit the staged change. On zero exit, increment `triage_commit_count`. On non-zero exit, record `commit-failed`.
+```
+（失敗側で increment 命令を省略すると「省略 = increment しない」と読めるが「省略 = 既存実装由来の暗黙の increment」と誤読される余地が残る。symmetry を明示することで cleanup 条件のbistability を守る）
+
+### dead flag よりも単一 counter で cleanup 条件を表現
+**Good** (`skills/dev-workflow-triage/SKILL.md` Step 4 Summary auto-cleanup 判定):
+```markdown
+If `triage_commit_count == 0` and release-bookkeeping was skipped (no commits), run auto-cleanup:
+  git switch "$original_branch" && git branch -D "$triage_branch_name"
+```
+（counter 単独で cleanup 条件を判定）
+**Bad** (boolean flag + counter の合成):
+```markdown
+Set `triage_branch_active = true` when branch creation succeeds in Step 1 Pre-flight.
+If `triage_branch_active && triage_commit_count == 0 && bookkeeping_skipped`, run auto-cleanup.
+```
+（fatal abort path は Step 4 summary を経由しないため `triage_branch_active` flag が判定に寄与する path が存在せず、dead flag に。Code Review iter 1 の「dead flag drop」finding パターン）
+
+### Run-level 失敗系は per-Finding edge-case 表に混ぜない
+**Good** (`skills/dev-workflow-triage/SKILL.md` Pre-flight 節 + `references/triage-criteria.md` Edge-case 表 を分離):
+```markdown
+# SKILL.md Pre-flight 節 (手続き的)
+- `git switch -c <triage-branch>` 非ゼロ exit → abort `branch creation failed (base=<base>)`
+- `git symbolic-ref -q HEAD` 非ゼロ exit → abort `detached HEAD: cannot save original branch reference`
+
+# triage-criteria.md Edge-case 表 (per-Finding loop 内のみ)
+| Edge case | Disposition |
+|---|---|
+| marketplace.json 不在 | `current_version = "unknown"` |
+| Finding 文字列が malformed | per-Finding `parse-error` |
+```
+（Run-level boundary は SKILL.md Pre-flight に手続き的に記述、per-Finding edge-case 表は loop 内 case のみ）
+**Bad** (両方を Edge-case 表に混在):
+```markdown
+| Edge case | Disposition |
+|---|---|
+| `git switch -c` 失敗 | abort run |
+| 検出 HEAD detached | abort run |
+| marketplace.json 不在 | `current_version = "unknown"` |
+| Finding 文字列が malformed | per-Finding `parse-error` |
+```
+（Run-level / per-Finding の semantics scope が混ざり、loop 内 disposition と loop 外 abort が同列に並ぶことで読み手の判断が曖昧になる）
+
+### Step 6 Simplify の rationale 段落は brevity を保つ
+**Good** (`skills/dev-workflow/references/self-retrospective.md` § 4 jq pattern note, brief):
+```markdown
+> Resolve `<X.Y.Z>` via `jq`'s in-filter `// "unknown"` plus a post-pipeline `-z` guard. The `|| echo` fallback alone misses the case where `jq` outputs the literal `null\n` with zero exit (entry / key absent).
+```
+（technical context は 2 文に圧縮、Simplify-revival check で再導入された膨らみを brevity に戻す）
+**Bad** (100+ words の rationale 段落):
+```markdown
+> The `<X.Y.Z>` resolution requires careful handling of three distinct error paths. First, when the marketplace.json file does not exist at the expected path, `jq` itself returns a non-zero exit code, and `2>/dev/null` suppresses the stderr. Second, when the file exists but the `dev-workflow` plugin entry is absent from the `plugins` array, `jq -r` outputs the literal string `null` followed by a newline to stdout, but importantly returns zero exit code... (以下 6 段落続く)
+```
+（technical 正確性は両方同じだが、配布スキル prose は brevity が要件。Code Review iter 2 で「英文 clarity / 冗長」として上がる頻出 finding）

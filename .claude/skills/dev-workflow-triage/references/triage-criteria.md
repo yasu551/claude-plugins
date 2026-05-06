@@ -19,6 +19,7 @@ Reference loaded by `dev-workflow-triage` during the "Judge each Finding" step (
 4. **Rules file required**: the only plausible fix is editing `.claude/rules/*.md`. Rules updates are owned by `extract-rules`. A `rules-conflict` Finding can still be accepted when the fix is *referencing* existing rules from the skill — only reject when the rules themselves need new content.
 5. **Large restructure**: the fix implies splitting a SKILL.md, introducing new section structure, reshuffling cross-skill responsibilities, or editing more than one file / creating new files. Not safe for a single-pass autonomous run.
 6. **Contradicts a deliberate design choice**: reading the target file shows the current behavior is intentional (documented in a comment, a Decisions section, a rule file, or a commit message). Reject and note the source.
+7. **Already addressed in a later dev-workflow version**: stale-issue path applied when the issue's Producer version predates the current `dev-workflow` version (or either side is `unknown`). See SKILL.md § 3.3 Judge each Finding § Version-aware judgment for the (i) CHANGELOG entry + (ii) SKILL.md cite gates, the either-leg doubt fall-through to standard checklist, and the reason-string format.
 
 Note: the accept/reject checklist above is scoped to the triage judgment that runs before any edits. The subsequent `verify-diff` polish step empirically re-checks the applied diff against the Finding's stated objective, but its verdict does not retroactively change the accept decision — `verify-diff` can downgrade a Finding to `conflict` via safety rails, which is already covered by the edge-case dispatch table below.
 
@@ -34,6 +35,8 @@ Quick reference for per-case dispositions. SKILL.md's procedural prose is author
 | `Findings: N` line disagrees with `### Finding` count, or required field missing | Whole issue → `parse-error`; post comment; leave open |
 | `Target skill` outside the 4-skill bundle | Whole issue → `parse-error`; post comment; leave open |
 | Description text names a skill other than the declared `Target skill` | Per-Finding `reject` (out-of-scope target in description) |
+| `marketplace.json` has no `dev-workflow` plugin entry (or file missing) at producer or consumer time | Treat the resolved version as `unknown`. Producer emits `**Producer version:** dev-workflow vunknown`; consumer's `producer_version == "unknown"` triggers Reject #7 stale-issue path on every Finding (still gated by the (i)+(ii) AND with doubt fall-through, so false rejects remain bounded) |
+| `producer_version < current_version` (or either side `unknown`) AND CHANGELOG entry for `<target-skill>` exists between the two AND current SKILL.md no longer reproduces the concern | Per-Finding `reject` (Reject #7 stale-issue); reason includes `producer_version`, `current_version`, CHANGELOG entry, and SKILL.md cite |
 | Edit `old_string` not found (prior Finding's commit overwrote the region) | Per-Finding `conflict`; commit nothing; continue |
 | Edit leaves frontmatter broken | Per-Finding `conflict`; `git checkout HEAD -- <file>`; continue from clean tree |
 | verify-diff returns `converged` | Proceed to (d2) skill-review polish |
