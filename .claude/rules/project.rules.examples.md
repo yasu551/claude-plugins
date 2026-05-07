@@ -967,3 +967,147 @@ Per the record-write rules in § Apply accepted Findings record schema, ...
 **Risks § 4 (revised)**: subagent 内 outer-loop unknowns（旧 risks: regression sensitivity loss）
 ```
 （旧記述が残ったまま新記述を併記すると plan size が肥大化、Step 3-(N+1) reviewer に「buried decisions / scope creep」と再指摘される頻出パターン）
+
+### Routine-side action ownership over environment-finalization delegation
+**Good** (`dev-workflow-triage/SKILL.md` `## Commit policy` paragraph 2):
+```markdown
+`git push` is run by this routine — see `§ Push triage branch to origin` under
+`§ Step 4 — Emit summary` (once per run at end of Step 4). Per-Finding (g) Commit
+and Step 3.7 (j) bookkeeping only commit to local HEAD.
+```
+そして `§ Step 4 — Emit summary` 配下の新節:
+```markdown
+#### Push triage branch to origin
+
+Run after the auto-cleanup decision settles, before emitting the summary stdout.
+
+- If `triage_commit_count == 0` (auto-cleanup ran or attempted): no push
+- If `triage_commit_count > 0`: `git push -u origin "$triage_branch_name"`...
+
+**Session-level push-target conflict**: if operator-level instructions
+(`CLAUDE.md`, session bootstrap, environment templates) name a different
+"designated branch" as the push target, do **not** consolidate the triage
+branch into that name. The triage branch name is per-run isolation
+infrastructure (`§ Triage branch isolation`); consolidating into a different
+name loses same-day re-run stacking semantics and disconnects the operator's
+PR identity from the run timestamp. Reconcile post-run by rebase / merge
+if needed, not by mid-routine rename.
+```
+（routine 自身が `git push` を once per run で実行、`Bash(git push *)` を `allowed-tools` に追加、session-level "designated branch" rule との conflict 文脈を SKILL.md 内に明記、design intent ベースの rationale を伴う禁止条項）
+**Bad** (旧 prose):
+```markdown
+`git push` is not performed here — Claude Code on the Web's session
+finalization handles pushes. Cross-run note: a prior run may have left
+committed-but-unpushed changes on HEAD ...
+```
+（環境機能への委譲宣言。session-level rule との衝突点が SKILL.md 内で言及されず、別ブランチ名への consolidate 誤読を許す。local 環境では暗黙に push が落ちる feature parity 欠落も発生）
+
+### Closed form-set invariant for multi-form summary tokens
+**Good** (`dev-workflow-triage/SKILL.md` Step 4 `triage-branch:` summary bullet):
+```markdown
+- `triage-branch`: one of
+  - `<triage_branch_name> (based on <triage_branch_base>) — <N> commits — pushed to origin` (push success)
+  - `<triage_branch_name> (based on <triage_branch_base>) — <N> commits — push-failed (<reason>)` (push fail — branch retained for the operator to push manually)
+  - `<triage_branch_name> (based on <triage_branch_base>) — created and deleted (0 commits)` (auto-cleanup case — partial-cleanup failures are reported via the separate `cleanup:` warning, not here)
+```
+そして `§ Auto-cleanup` で:
+```markdown
+- Render `triage-branch: ... — created and deleted (0 commits)` regardless of cleanup outcome —
+  partial-cleanup failures (`cleanup: switch back failed (...)` / `cleanup: branch -D failed (...)`)
+  surface via separate `cleanup:` warning lines, keeping the `triage-branch:` form set closed at 3
+```
+（form 数を 3 に bounded、partial cleanup failure は別 warning line に分離）
+**Bad** (新 form を追加):
+```markdown
+- `triage-branch`: one of
+  - `... — <N> commits — pushed to origin`
+  - `... — <N> commits — push-failed (<reason>)`
+  - `... — created and deleted (0 commits)` (auto-cleanup full success)
+  - `... — partial cleanup: switch back failed` (auto-cleanup partial)   # 4th form
+  - `... — partial cleanup: branch -D failed` (auto-cleanup partial)     # 5th form
+```
+（form 数が 5 に膨張。後追い読み手が switch 漏れする / class-level extension audit の対象が不明確になる）
+
+### External-command failure: retry once + stderr-derived `<reason>` + no auto-recovery
+**Good** (`dev-workflow-triage/SKILL.md` `#### Push triage branch to origin`):
+```markdown
+- `git push -u origin "$triage_branch_name"`. On non-zero exit, retry once after a
+  1–2 second sleep; on the second non-zero exit, record `push-failed (<reason>)`
+  and stop retrying
+- On zero exit (initial attempt or the single retry): record push status
+  `pushed to origin` for the `triage-branch:` summary line
+- On the second non-zero exit: record push status `push-failed (<reason>)` and
+  surface as a non-fatal warning per `§ No-Stall Principle`. `<reason>` is the
+  **last non-empty line of `git push` stderr, truncated to ≤ 80 characters** —
+  sufficient for an operator to distinguish auth / network / non-fast-forward /
+  hook-rejection without inventing a classification taxonomy. If stderr has no
+  non-empty line (empty or whitespace-only), render `push-failed (no stderr)`.
+
+  Do **not** auto-recover (no force push, no rebase, no branch rename) —
+  the operator can `git push` manually post-run
+```
+（retry 1 回・1–2 second sleep、stderr 最終 non-empty 行 ≤ 80 文字 truncate、空 / whitespace-only fallback `(no stderr)` 明記、auto-recovery 禁止条項）
+**Bad** (over-spec retry / fragile reason / 暗黙 recovery 容認):
+```markdown
+- `git push -u origin "$triage_branch_name"` with exponential-backoff retry
+  (4 retries: 2s, 4s, 8s, 16s)
+- On persistent failure, append `— push failed (<exit reason>)` and surface as
+  a warning
+```
+（4 段 retry は deterministic rejection（auth / non-fast-forward / hook）には無効で over-spec、`<exit reason>` の抽出仕様が未定義で empty stderr 経路が render すると漏れ、auto-recovery を禁止する文言が無いため downstream LLM が `rebase してから retry` を hallucinate）
+
+### Mis-justification audit when citing infrastructure mechanisms
+**Good** (`dev-workflow-triage/SKILL.md` § Push triage branch to origin の禁止条項 rationale):
+```markdown
+**Session-level push-target conflict**: ... do **not** consolidate the triage
+branch into that name. The triage branch name is per-run isolation
+infrastructure (`§ Triage branch isolation`); consolidating into a different
+name loses same-day re-run stacking semantics and disconnects the operator's
+PR identity from the run timestamp.
+```
+（design intent ベース — 「per-run isolation を失う」「operator の PR identity が run timestamp と切れる」という実態を justify。引用する mechanism が「実際にどう動くか」の主張ではない）
+**Bad** (誤った mechanism 引用):
+```markdown
+**Session-level push-target conflict**: ... do **not** consolidate the triage
+branch into that name. The triage branch name is per-run isolation
+infrastructure; losing the name loses same-day re-run stacking semantics
+since `§ Triage branch isolation`'s `git for-each-ref` requires prior-run
+`triage-*` to survive on origin.
+```
+（`git for-each-ref` は local refs を読むので origin 残存は要件ではない。誤引用が peer review iter 1 で Major finding として上がる）
+
+### Cross-section rendering-authority pointer (computed-here / rendered-there)
+**Good** (`dev-workflow-triage/SKILL.md` の 2 sections 相互ポインタ):
+```markdown
+#### Auto-cleanup of empty triage branch
+
+Run **before** `§ Push triage branch to origin` and the summary stdout
+(Auto-cleanup determines the rendering of the 0-commit form only — the
+>0-commit form's suffix is decided by `§ Push triage branch to origin` below).
+
+...
+
+When `triage_commit_count > 0`, do **not** run the cleanup ... Render the
+appropriate `<N> commits` form per `§ Step 4 — Emit summary` `triage-branch`
+bullet (the post-push state determined by `§ Push triage branch to origin`
+decides between the `pushed to origin` and `push-failed (<reason>)` suffix).
+
+#### Push triage branch to origin
+
+Run **after** the auto-cleanup decision settles, **before** emitting the
+summary stdout (so the `triage-branch` summary line above can render the
+post-push state).
+```
+（実行順 + 各 section の rendering 担当範囲が両方向から読める。0-commit form / >0-commit form の決定権がどちらにあるか明示）
+**Bad** (片方向のみ / 相互ポインタ無し):
+```markdown
+#### Auto-cleanup of empty triage branch
+
+If `triage_commit_count == 0`, run cleanup and render `... — created and deleted (0 commits)`.
+
+#### Push triage branch to origin
+
+If `triage_commit_count > 0`, push and render `... — pushed to origin` or
+`... — push-failed (<reason>)`.
+```
+（実行順序 / どちらが最終 render を確定するかが prose から読めず、後追い読み手は section 順序とコード読みで再構築する必要がある）

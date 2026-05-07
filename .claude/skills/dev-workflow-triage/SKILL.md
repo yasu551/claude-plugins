@@ -1,7 +1,7 @@
 ---
 name: dev-workflow-triage
 description: Triage open issues in the dev-workflow-bundle retrospective repo. Read each open issue, judge each Finding (accept / reject), apply accepted fixes to the bundle skills (dev-workflow, ask-peer, extract-rules, rules-review), post a triage comment, and close the issue. Designed for non-interactive routine execution (no plan mode, no user prompts) on Claude Code on the Web.
-allowed-tools: Read, Edit, Write, TodoWrite, Agent, Skill(verify-diff), Skill(skill-review), Skill(publicity-review), Bash(gh auth status), Bash(gh --version), Bash(gh issue list *), Bash(gh issue comment *), Bash(gh issue close *), Bash(git diff *), Bash(git add *), Bash(git commit *), Bash(git reset), Bash(git checkout HEAD -- *), Bash(git rev-parse *), Bash(git config --get *), Bash(git for-each-ref *), Bash(git symbolic-ref *), Bash(git switch *), Bash(git branch *), Bash(date *), Bash(jq *), Bash(mkdir -p *)
+allowed-tools: Read, Edit, Write, TodoWrite, Agent, Skill(verify-diff), Skill(skill-review), Skill(publicity-review), Bash(gh auth status), Bash(gh --version), Bash(gh issue list *), Bash(gh issue comment *), Bash(gh issue close *), Bash(git diff *), Bash(git add *), Bash(git commit *), Bash(git reset), Bash(git checkout HEAD -- *), Bash(git push *), Bash(git rev-parse *), Bash(git config --get *), Bash(git for-each-ref *), Bash(git symbolic-ref *), Bash(git switch *), Bash(git branch *), Bash(date *), Bash(jq *), Bash(mkdir -p *)
 ---
 
 # Dev Workflow Triage
@@ -27,7 +27,7 @@ Concretely, the recognized orchestrator-side return point is the **single (D) `A
 
 **Phase / per-issue TodoWrite transitions are non-stalling.** Marking a phase row or per-issue row `completed` and the next row `in_progress` must happen as part of the same tool-call burst that produces the next concrete action — never as a standalone summary turn. The `TodoWrite` write itself is allowed (it's a status-only side effect, not a sensitive-path file write, so no permission dialog fires in routine execution), but no user-facing prose is emitted between the status flip and the next non-`TodoWrite` tool call.
 
-**Non-fatal errors are recorded and skipped, not stops.** Per-Finding / per-issue errors (`comment-failed`, `close-failed`, `commit-failed`) continue with the next Finding or issue. Step 2 records `overflow=true` and the run keeps going on the truncated list. Step 3.7 errors (`release-bookkeeping=failed (commit error|scope leak|version skew|json invalid|changelog edit error)`) fall through to Step 4 — Step 3.7 runs once per run after the per-issue loop, so "next Finding" is not a possible recovery there. `references/triage-criteria.md` § Edge-case dispatch table is the authoritative list of dispositions.
+**Non-fatal errors are recorded and skipped, not stops.** Per-Finding / per-issue errors (`comment-failed`, `close-failed`, `commit-failed`) continue with the next Finding or issue. Step 2 records `overflow=true` and the run keeps going on the truncated list. Step 3.7 errors (`release-bookkeeping=failed (commit error|scope leak|version skew|json invalid|changelog edit error)`) fall through to Step 4 — Step 3.7 runs once per run after the per-issue loop, so "next Finding" is not a possible recovery there. Step 4 push errors (`push-failed (<reason>)`) fall through to summary emission — push runs once per run after auto-cleanup, so there is no per-Finding recovery path either; the operator can `git push` manually post-run. See `§ Push triage branch to origin` for the `<reason>` extraction spec. `references/triage-criteria.md` § Edge-case dispatch table is the authoritative list of dispositions.
 
 **Stop-hook spurious fires are also non-fatal.** `~/.claude/stop-hook-git-check.sh` (auto-installed by Claude Code on the Web — see `§ Stop hook structural conflict`) fires on every Stop event during the (b)→(g) per-Finding flow because uncommitted state is normal mid-flow. The orchestrator main thread sees only one such Stop event per Finding (at the (D) subagent dispatch boundary — entry and return), but additional Stop events fire **inside the (D) subagent** at every internal `Skill(verify-diff)` / `Skill(skill-review)` / `Skill(publicity-review)` boundary; the subagent must treat each as spurious per the `--- STOP HOOK NOTE ---` paragraph in its prompt. The hook's `exit 2` injects a `Please commit and push…` feedback string but does **not** block — record the spurious fire and continue with the prescribed flow ((b)→(c)→(D)→(f)→(g) on the orchestrator side; the subagent runs its outer review loop iterating verify-diff → skill-review → publicity-review up to 3 times internally). Do **not** jump ahead to (g) commit on hook feedback alone; that bypasses (D) entirely and is a misbehavior.
 
@@ -81,7 +81,7 @@ fix(<target-skill>): <Finding 1-line summary> (auto-triage #<issue-N>)
 <optional 1-2 line body: Finding Category, brief reason>
 ```
 
-`git push` is not performed here — Claude Code on the Web's session finalization handles pushes. Cross-run note: a prior run may have left committed-but-unpushed changes on HEAD (e.g. push happens only at session end, or a session died before push). That is expected and benign — Step 1's clean-working-tree check passes as long as no uncommitted diff is present, and the next triage run simply stacks fresh commits on top.
+`git push` is run by this routine — see `§ Push triage branch to origin` under `§ Step 4 — Emit summary` (once per run at end of Step 4). Per-Finding (g) Commit and Step 3.7 (j) bookkeeping only commit to local HEAD.
 
 ## Execution flow
 
@@ -470,19 +470,41 @@ issue #<N> Finding <n>: <accept|reject|conflict|parse-error>
 - Failure counts: `comment-failed` / `close-failed` / `commit-failed`, with (issue#, finding#) pairs
 - `overflow=true` notice if Step 2 hit the 50-issue cap (rendered as `50-issue cap reached`)
 - `release-bookkeeping`: one of `<commit-hash>` (success), `skipped (no commits)`, `failed (version skew: dev-workflow=<v1>, dev-workflow-bundle=<v2>)`, `failed (json invalid)`, `failed (changelog edit error)`, `failed (scope leak)`, or `failed (commit error)` — sourced from Step 3.7's outcome
-- `triage-branch`: one of `<triage_branch_name> (based on <triage_branch_base>) — <N> commits` (the branch is retained for the operator to open a PR; `<N>` = `triage_commit_count` ≥ 1) or `<triage_branch_name> (based on <triage_branch_base>) — created and deleted (0 commits)` (auto-cleanup ran). Sourced from `§ Auto-cleanup of empty triage branch` below
+- `triage-branch`: one of
+  - `<triage_branch_name> (based on <triage_branch_base>) — <N> commits — pushed to origin` (push success — `<N>` = `triage_commit_count` ≥ 1)
+  - `<triage_branch_name> (based on <triage_branch_base>) — <N> commits — push-failed (<reason>)` (push fail — branch retained for the operator to push manually)
+  - `<triage_branch_name> (based on <triage_branch_base>) — created and deleted (0 commits)` (auto-cleanup case — `<N>` = 0; partial-cleanup failures are reported via the separate `cleanup:` warning, not here)
+
+  Sourced from `§ Auto-cleanup of empty triage branch` and `§ Push triage branch to origin` below
 - `stop-hook-detected: ~/.claude/stop-hook-git-check.sh (Web env standard hook) — spurious fires during multi-subagent dispatch flow are recorded and ignored per § Stop hook structural conflict` if the Step 1 pre-flight detection set `stop_hook_present=true`. Omit the line entirely when the flag is unset (Local environment / hook absent)
 
 #### Auto-cleanup of empty triage branch
 
-Run **before** emitting the summary stdout (so the `triage-branch` line above can render the post-cleanup state). If `triage_commit_count == 0`, the run produced zero commits on the triage branch (per-Finding commits and the Step 3.7 bookkeeping commit both increment the counter, so a `0` here implies the bookkeeping step reached `skipped (no commits)`) and there is nothing to PR — clean up:
+Run **before** `§ Push triage branch to origin` and the summary stdout (Auto-cleanup determines the rendering of the 0-commit form only — the >0-commit form's suffix is decided by `§ Push triage branch to origin` below). If `triage_commit_count == 0`, the run produced zero commits on the triage branch (per-Finding commits and the Step 3.7 bookkeeping commit both increment the counter, so a `0` here implies the bookkeeping step reached `skipped (no commits)`) and there is nothing to PR — clean up:
 
 - `git switch "$original_branch"`. Non-zero exit ⇒ record warning `cleanup: switch back failed (original=<original_branch>)` and skip the `git branch -D` step (deleting a checked-out branch fails anyway). Do not abort
 - `git branch -D "$triage_branch_name"`. Non-zero exit ⇒ record warning `cleanup: branch -D failed (branch=<triage_branch_name>)`. Do not abort. The `-D` (capital, hard-delete) is intentional — the branch we just created is unmerged into anything by definition; lowercase `-d` would refuse to delete it on the merged-state safety check
-- On both successful: render `triage-branch: <triage_branch_name> (based on <triage_branch_base>) — created and deleted (0 commits)` in the summary. Otherwise render the `<N> commits` form (counter is 0 but cleanup did not complete, so the branch may still exist — point the operator at it via the warning)
+- Render `triage-branch: <triage_branch_name> (based on <triage_branch_base>) — created and deleted (0 commits)` in the summary regardless of cleanup outcome — partial-cleanup failures (`cleanup: switch back failed (...)` / `cleanup: branch -D failed (...)`) surface via separate `cleanup:` warning lines, keeping the `triage-branch:` form set closed at 3 (per `§ Step 4 — Emit summary` `triage-branch` bullet)
 
-When `triage_commit_count > 0`, do **not** run the cleanup — the branch holds at least one commit the operator wants to PR. Render the `<N> commits` form.
+When `triage_commit_count > 0`, do **not** run the cleanup — the branch holds at least one commit the operator wants to PR. Render the appropriate `<N> commits` form per `§ Step 4 — Emit summary` `triage-branch` bullet (the post-push state determined by `§ Push triage branch to origin` decides between the `pushed to origin` and `push-failed (<reason>)` suffix).
 
 Note: `original_branch` may itself match `triage-*` (re-running on a previously-created triage branch). Cleanup is identical — `git switch` returns to that triage branch and `git branch -D <new>` removes only the just-created empty branch. The parent triage branch survives.
+
+#### Push triage branch to origin
+
+Run **after** the auto-cleanup decision settles, **before** emitting the summary stdout (so the `triage-branch` summary line above can render the post-push state).
+
+- If `triage_commit_count == 0` (auto-cleanup ran or attempted): no push — there is nothing to push regardless of whether cleanup succeeded fully. Skip directly to summary emission
+- If `triage_commit_count > 0`:
+  - `git push -u origin "$triage_branch_name"`. On non-zero exit, retry once after a 1–2 second sleep; on the second non-zero exit, record `push-failed (<reason>)` and stop retrying
+  - On zero exit (initial attempt or the single retry): record push status `pushed to origin` for the `triage-branch:` summary line
+  - On the second non-zero exit: record push status `push-failed (<reason>)` for the `triage-branch:` summary line and surface as a non-fatal warning per `§ No-Stall Principle`. `<reason>` is the **last non-empty line of `git push` stderr, truncated to ≤ 80 characters** — sufficient for an operator to distinguish auth / network / non-fast-forward / hook-rejection without inventing a classification taxonomy. If stderr has no non-empty line (empty or whitespace-only), render `push-failed (no stderr)`. Example shapes (the operator scans these to decide next action — no fixed format guaranteed):
+    - `push-failed (! [rejected]        triage-... -> triage-... (non-fast-forward))`
+    - `push-failed (fatal: Authentication failed for 'https://github.com/...')`
+    - `push-failed (remote: pre-push hook rejected (policy violation))`
+
+    Do **not** auto-recover (no force push, no rebase, no branch rename) — the operator can `git push` manually post-run
+
+**Session-level push-target conflict**: if operator-level instructions (`CLAUDE.md`, session bootstrap, environment templates) name a different "designated branch" as the push target, do **not** consolidate the triage branch into that name. The triage branch name is per-run isolation infrastructure (`§ Triage branch isolation`); consolidating into a different name loses same-day re-run stacking semantics and disconnects the operator's PR identity from the run timestamp. Reconcile post-run by rebase / merge if needed, not by mid-routine rename.
 
 Always emit the summary, even on zero-activity runs — "ran but made no changes" must be distinguishable from "didn't run at all".
