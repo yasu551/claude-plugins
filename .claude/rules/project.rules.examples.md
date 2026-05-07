@@ -820,3 +820,150 @@ If `triage_branch_active && triage_commit_count == 0 && bookkeeping_skipped`, ru
 > The `<X.Y.Z>` resolution requires careful handling of three distinct error paths. First, when the marketplace.json file does not exist at the expected path, `jq` itself returns a non-zero exit code, and `2>/dev/null` suppresses the stderr. Second, when the file exists but the `dev-workflow` plugin entry is absent from the `plugins` array, `jq -r` outputs the literal string `null` followed by a newline to stdout, but importantly returns zero exit code... (以下 6 段落続く)
 ```
 （technical 正確性は両方同じだが、配布スキル prose は brevity が要件。Code Review iter 2 で「英文 clarity / 冗長」として上がる頻出 finding）
+
+### Branch behavior は completion で specify する（negation 禁止）
+**Good** (`skills/dev-workflow-triage/SKILL.md` § Apply accepted Findings (D) Aggregate JSON parse and record-write):
+```markdown
+**Full record-write set (applies to both `aggregate.status == "ok"` and `aggregate.status == "callee-abort"`):**
+
+- `record.verify_diff = aggregate.verify_diff.status`
+- `record.iterations_used = aggregate.verify_diff.iterations_used`
+- `record.skill_review = aggregate.skill_review.status`
+- `record.publicity_review = aggregate.publicity_review.status`
+- `record.publicity_iterations_used = aggregate.publicity_review.iterations_used`
+- `record.warnings ⨃= aggregate.warnings`
+- `record.outer_iter = aggregate.outer_iter`
+- `record.outer_exit = aggregate.outer_exit`
+
+**Branch-specific actions:**
+
+- If `aggregate.status == "ok"`: proceed to (f) scope check
+- If `aggregate.status == "callee-abort"`: revert paths via `git checkout HEAD -- <path>`, skip remaining (D) work for this Finding, record `commit-skipped`
+```
+（共通 record 書き込みを Full set として上に立て、分岐固有の動作だけを下に列挙）
+**Bad** (negation で specify):
+```markdown
+- If `aggregate.status == "ok"`: write all `record.*` fields and proceed to (f)
+- If `aggregate.status == "callee-abort"`: same record writes as `ok` except revert and skip (f)
+```
+（"same record writes ... except" の negation で specify すると、後追い読み手が defaults を再構築する必要があり、`iterations_used` / `warnings[]` のような aggregation field が hidden gap になる。Code Review iter 1 で Critical-severity finding として上がる）
+
+### Pre-implementation smoke test (Step 0) for undocumented platform capabilities
+**Good** (Plan の Test plan 節):
+```markdown
+**Step 0 Pre-implement smoke test (必須 — gating phase before Step 5)**:
+
+1. Test 1 — Skill-from-subagent feasibility: dispatch `Agent` with `subagent_type: general-purpose` and have it call `Skill(verify-diff)`; PASS if subagent returns `SKILL-WORKS-IN-SUBAGENT` token
+2. Test 2 — allowed-tools inheritance: enumerate subagent's tool set; verify `Skill` is included and `Agent` is NOT (recursion prevention)
+3. Test 3 — outer-loop simulation: small fixture exercising the planned (d-loop) state machine
+4. Test 4 — audit-trail recording: emit overall verdict ∈ {READY-TO-IMPLEMENT, NEEDS-FALLBACK, BLOCKED}
+
+Risks § 4 mitigation: subagent 内 outer-loop 挙動 unknowns は Step 0 item #3 で必ず gate（"推奨" ではなく "必須"）。
+```
+（feasibility / tool inheritance / state-machine simulation / audit-trail の 4 項目で gate、wording は「必須」で統一）
+**Bad** (Risks のみで mitigation を表現、smoke test を「推奨」と書く):
+```markdown
+**Risks**: subagent から Skill 呼び出しの実機可用性は前例なし。Step 0 smoke test を**推奨**。
+```
+（"推奨" だと iter 2 で Major-severity finding として上がる。前例なしの platform capability に依存する architectural rewrite では smoke test は必須化する）
+
+### Dispatch-layer health と callee-layer health の counter 分離
+**Good** (`skills/dev-workflow-triage/SKILL.md` (E) Per-Finding subagent error handling):
+```markdown
+**(E) Shared updates** — applies on E.1 (verdict parse failure) / E.2 (schema violation) / E.3 (tool error):
+
+- Increment `D_dispatch_error_count` by 1
+- Per-callee disable counters (`verify_diff_disabled` / `skill_review_disabled` / `publicity_review_disabled`) are **NOT** incremented or reset on the (E) path — only `D_dispatch_error_count` advances. Rationale: callee skills did not run, so per-callee health information is not observable from this turn
+- If `D_dispatch_error_count >= 3`: set `D_dispatch_disabled = true` and skip subsequent (D) dispatches; `D_dispatch_error_count` resets to 0 only on a successful (D) dispatch
+```
+そして Step 4 aggregate render で:
+```markdown
+- (D) dispatch state: `enabled` or `disabled-after-errors` (D_dispatch_error_count=<n>); count of Findings with each (E) class
+- per-callee disable state: `verify_diff` <enabled/disabled>, `skill_review` <enabled/disabled>, `publicity_review` <enabled/disabled> — independent observability axis from (D) state above
+```
+（dispatch-layer の health (`D_dispatch_*`) と callee-layer の health (`<skill>_disabled`) を別 counter / 別 render 行で表現）
+**Bad** (両 layer を 1 counter に集約):
+```markdown
+**(E) Shared updates**: increment per-callee disable counter for whichever callee was about to run when (E) fired
+```
+（callee は走らなかったため per-callee health 情報を持たないのに increment すると Step 4 aggregate で「dispatch-layer error なのか callee-layer error なのか」が読めなくなる。observability axis が崩れる）
+
+### Sequential N-callee orchestration を 1 Agent dispatch に集約
+**Good** (`skills/dev-workflow-triage/SKILL.md` § Apply accepted Findings (D) Per-Finding subagent dispatch):
+```markdown
+For each accepted Finding, dispatch a single `Agent` (subagent_type: general-purpose) that internally runs the `Skill(verify-diff) → Skill(skill-review) → Skill(publicity-review)` chain and returns one aggregate JSON. Orchestrator-side decision points: 9 (3 callees × up-to-3 outer iters) → 1 (single aggregate parse).
+
+Subagent prompt step 2 wording: "**Do not run further `Skill()` dispatches beyond the three enumerated below.** Each callee is invoked exactly once per outer-iter pass; do not dispatch additional Skill() calls outside this contract."
+
+Aggregate JSON schema (top-level): `status` ∈ {`ok`, `callee-abort`, `error`}, `outer_iter`, `outer_exit`, plus nested per-callee return fields (`verify_diff.{status, iterations_used, reverted_paths, warnings}`, `skill_review.{status, applied_edits_count, notes_remaining_count, reason}`, `publicity_review.{status, iterations_used, reverted_paths, remaining_findings, reason}`).
+```
+（orchestrator stall surface を N→1 に削減、subagent prompt で追加 dispatch を明示禁止して subagent 内 stall surface も bound、aggregate schema で全 callee 状態を nest して carry）
+**Bad** (orchestrator から sequential `Skill()` 直呼び):
+```markdown
+For each accepted Finding:
+  Skill(verify-diff)     → parse JSON → branch
+  Skill(skill-review)    → parse JSON → branch
+  Skill(publicity-review)→ parse JSON → branch
+  (each return point creates a JSON-echo turn-end opportunity for stall)
+```
+（reminder / closed list / anti-pattern 列挙系の prose discipline は diminishing returns に入っており、N decision points × 違反確率の積み上がりが構造的問題なので architectural fix が必要）
+
+### Routing-field entry shape validation extension
+**Good** (`skills/dev-workflow-triage/SKILL.md` (E.2) Schema violation):
+```markdown
+2. **Schema violation** — required keys (`verify_diff`, `skill_review`, `publicity_review`, `outer_iter`, `outer_exit`) are missing, values fail their expected shape, or any entry in `publicity_review.remaining_findings[]` lacks a non-empty string `file` (the callee-abort revert branch dereferences `<entry>.file` via `git checkout HEAD -- <path>`; without entry-shape validation the revert step crashes on malformed paths) → emit `{"status": "error", "reason": "verdict schema violation"}` and apply (E) Shared updates
+```
+（既存の `Edit` 向け entry-shape validation rule を class-level extend: `Edit` だけでなく `git checkout` を含む全 downstream tool call が dereference するフィールドを parse 段階で validate）
+**Bad** (top-level keys のみ check):
+```markdown
+2. **Schema violation** — required keys missing or values fail their expected shape → emit error verdict
+```
+（routing-field の entry-shape validation がないと、revert path 計算で `git checkout` が malformed `<path>` で crash する経路が残る。iter 2 Code Review で Major finding として上がる）
+
+### Bold-prose label cross-reference style
+**Good** (`skills/dev-workflow-triage/SKILL.md` での cross-reference):
+```markdown
+Per the record-write rules in § Apply accepted Findings's "Per-Finding record kept in memory" paragraph, ...
+```
+（参照先が `### Heading` でなく段落冒頭の bold-prose label `**Per-Finding record kept in memory**` で identify される場合、`§ <Heading>'s "<bold label>" paragraph` の form で bold 内文言を verbatim で囲み込む）
+**Bad** (存在しない heading に dangling reference):
+```markdown
+Per the record-write rules in § Apply accepted Findings record schema, ...
+```
+（`Apply accepted Findings record schema` という heading は実在せず、実体は bold-prose label。Code Review で Major-severity dangling cross-reference として上がる）
+
+### Sibling enum field の symmetric extension audit
+**Good** (`record.verify_diff` / `record.skill_review` / `record.publicity_review` enum 拡張):
+```markdown
+- `record.verify_diff` ∈ {`converged`, `unresolved`, `skipped`, `conflict`, `error`}
+- `record.skill_review` ∈ {`clean`, `notes left after applied-edits (<n>)`, `notes left after max iters (<n>)`, `parse-error`, `error`}
+- `record.publicity_review` ∈ {`converged-iter-<k>`, `unresolved-<count>`, `conflict (<reason>)`, `skipped (<reason>)`, `error`}
+```
+（3 sibling enum 全てに `error` 値を symmetric に追加、aggregate render の switch 文も全 enum を網羅）
+**Bad** (片側だけ asymmetric に拡張):
+```markdown
+- `record.verify_diff` ∈ {..., `error`}
+- `record.skill_review` ∈ {..., `error`}
+- `record.publicity_review` ∈ {...}   # error が抜けている
+```
+（asymmetric に残すと aggregate render の `switch (record.publicity_review)` で `error` ケースが取りこぼされる。Code Review iter 2 / iter 3 の class-level extension audit で finding 化）
+
+### Plan rewrite triggered by user material change at Step 4 gate
+**Good** (Decisions § 1 で Alternative を採用と決定後の plan rewrite):
+```markdown
+- Title から旧 approach 由来の語句を削除（例: "1-pass linear" を削除）
+- Context / Goal / Approach の旧記述を全て新 approach に置換、コスト削減効果が消える等の実態変化も明記
+- Decisions § 1 の Recommendation と Alternative を swap（user 既選択を Recommendation に）
+- Decisions § 3（旧 phased landing 議論）は #2 を切り離す path がなく意味喪失したため削除
+- Risks § 4 を「subagent 内 outer-loop 挙動 unknowns」に完全置換（旧 approach 由来の Risks は残さない）
+- Step 3-(N+1) で再 review iter を立ち上げてから ExitPlanMode で再提示
+```
+（material change 後の plan を 1 pass で end-to-end rewrite、Title / Context / Goal / Approach / Decisions / Risks 全節を sweep）
+**Bad** (旧記述を残したまま新記述を併記):
+```markdown
+**Approach (revised)**: subagent 内に outer loop を移植して維持する案に変更（旧 approach: outer loop 廃止）
+**Decisions § 1 (NEW Recommendation)**: subagent 内移植維持
+**Decisions § 1 (旧 Recommendation, now Alternative)**: outer-loop 廃止
+**Risks § 4 (revised)**: subagent 内 outer-loop unknowns（旧 risks: regression sensitivity loss）
+```
+（旧記述が残ったまま新記述を併記すると plan size が肥大化、Step 3-(N+1) reviewer に「buried decisions / scope creep」と再指摘される頻出パターン）

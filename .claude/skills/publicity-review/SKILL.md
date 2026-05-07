@@ -31,8 +31,9 @@ The caller must **not** stage changes while this skill is running. The skill rea
    ```json
    {"status": "skipped", "iterations_used": 0, "applied_edits_count": 0, "findings_count": 0, "remaining_findings": [], "warnings_findings": [], "reverted_paths": [], "reason": "empty diff"}
    ```
-4. **Diff size cap**: if the diff exceeds **102400 bytes (100 KB)**, return early with `status=skipped`, `reason="diff too large"`, `iterations_used=0`. The cap protects subagent context from being saturated; callers running against whole-workflow diffs (typically `dev-workflow` `hooks.on_complete`) may hit this and must surface the skip as a visible warning — see § Sub-skill caller directive.
-5. Compute `affected_files` — the set of file paths in the diff. Hold this set in main-thread context as the scope-check baseline for Step 2 (c).
+4. Compute `affected_files` — the set of file paths in the diff. Hold this set in main-thread context as the scope-check baseline for Step 2 (c).
+
+There is no explicit pre-flight diff-size cap — sibling review skills (`ask-peer`, `verify-diff`, `skill-review`, `rules-review`) all dispatch without one, and `publicity-review`'s detection task (local pattern matching for secret / path / URL signatures) is less context-sensitive than cross-file semantic review. If the dispatch is too large for the subagent runtime, the `Agent` tool returns an error / timeout / empty response, which falls through to `## Dispatch failure` (`status=skipped, reason="dispatch error"`). That path captures the only real-world failure mode an absolute byte cap was protecting against.
 
 ### Step 2 — Iteration loop (i = 1 .. Max iterations)
 
@@ -180,9 +181,9 @@ End your response with a single fenced JSON block matching this schema:
 Field semantics:
 
 - Arrays (`remaining_findings`, `warnings_findings`, `reverted_paths`) and `reason` are populated only when the corresponding step produced a value; otherwise empty `[]` / JSON `null`. `findings_count = len(remaining_findings) + len(warnings_findings)` for `converged` / `unresolved`, `0` for `skipped` / `conflict`. `reverted_paths` is non-empty only for `conflict` (the safety rails are the only writer). `warnings_findings` is the bucket for findings that fall through Step 3's `unresolved` judgment rule.
-- `iterations_used`: number of iterations whose subagent dispatch returned a verdict, including the iteration whose verdict triggered `converged`. Step 1 early returns (empty diff, diff too large) count as `0`.
+- `iterations_used`: number of iterations whose subagent dispatch returned a verdict, including the iteration whose verdict triggered `converged`. Step 1 early return (empty diff) counts as `0`.
 
-`reason` enum: `empty diff` | `diff too large` | `verdict parse failure` | `verdict schema violation` | `divergent findings` | `frontmatter broken` | `scope violation` | `dispatch error` | `null`.
+`reason` enum: `empty diff` | `verdict parse failure` | `verdict schema violation` | `divergent findings` | `frontmatter broken` | `scope violation` | `dispatch error` | `null`.
 
 The `null` token at the end of the enum means JSON `null` (not the string `"null"`).
 
@@ -196,9 +197,8 @@ This skill follows the same **terminal contract pattern** as `verify-diff` § St
 
 When invoked from `dev-workflow-triage`'s `§ 3.4 Apply accepted Findings` (d3) bullet, the orchestrator parses the JSON and continues with sub-step (f) Scope check + stage. See `dev-workflow-triage` SKILL.md `§ No-Stall Principle` for the canonical no-stall write-up.
 
-When invoked from `dev-workflow`'s `hooks.on_complete` mechanism, the JSON block becomes part of the hook's stdout and is shown to the user. Two cases warrant explicit caller-side handling beyond raw JSON visibility:
+When invoked from `dev-workflow`'s `hooks.on_complete` mechanism, the JSON block becomes part of the hook's stdout and is shown to the user. The case that warrants explicit caller-side handling beyond raw JSON visibility:
 
-- `status=skipped, reason="diff too large"` means the final-gate review was bypassed entirely — the user should see this surfaced as a visible warning, not buried inside a JSON block they may scan past.
 - `status=unresolved` indicates the workflow's diff still contains content unsuitable for publication. `dev-workflow` does not commit, so no auto-revert runs, but the caller should treat this as a high-stakes signal and surface `remaining_findings` prominently.
 
 ## Agent unavailable fallback
