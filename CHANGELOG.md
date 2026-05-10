@@ -2,6 +2,20 @@
 
 ## 2026-05-09
 
+### dev-workflow v1.34.15 / dev-workflow-bundle v1.34.15
+
+- fix(dev-workflow): add result-recovery branch to Step 6 for unobservable Simplify output (auto-triage #17)
+  - Category: ambiguity; Step 6 lacked a recovery branch when context compaction occurred during/after `Skill(simplify)`, making the result unobservable. Added bullet 3 instructing inspection of `git diff <base-commit>`: if changes attributable to a simplification pass are visible, treat simplify as completed and proceed; otherwise re-execute `Skill(simplify)` once (inspection-and-fix-class skills are idempotent) before Step 7.
+- fix(dev-workflow): extend class-level extension audit to Critical/Major-severity findings (auto-triage #16)
+  - Category: missing-branch; Step 8 class-level extension audit only triggered after Critical-severity fixes, so Major-severity findings whose fix addresses a structural pattern (e.g. negation-style branch description) escaped class-level scan and re-surfaced in subsequent iters as the same defect at a sibling location. Extended the trigger to include Major-severity findings whose fix addresses a structural pattern (closed enums, shared safety-rail callers, parallel handlers, etc.) so iter-1 sibling instances are caught in the same iter as the named instance.
+- fix(dev-workflow): extend Simplify-revival check to iter 1 when Step 6 ran (auto-triage #16)
+  - Category: missing-branch; Simplify-revival check fired only at iter k≥2, but iter-1 fixes can already re-introduce narration / preamble / redundant prose that an earlier Step 6 Simplify pass deliberately removed (fix patches see only the line-level diff). Extended to iter k≥1 when Step 6 ran earlier in this session (iter k≥2 otherwise) so first-iter fixes are also audited against Simplify deletions.
+
+### rules-review v1.1.2 / dev-workflow-bundle v1.34.15
+
+- fix(rules-review): add cross-file scope expansion to reviewer prompt (auto-triage #15)
+  - Category: wrong-default; Reviewer prompt's `**Scope**` statement implicitly framed checks as same-file, causing cross-file references / imports / shared-contract violations to be missed in cycle 1 and only caught in cycle 2 as low-confidence findings. Added an explicit cross-file scope clause: when a rule's text doesn't restrict to a single file (no "in this file" / "within this file" / equivalent limiting phrase), apply it across all changed files in the diff including cross-file references, imports, and shared contracts. Also added an explicit cycle 1 requirement — deferring cross-file rule application to a later cycle is a defect, not expected behavior.
+
 ### dev-workflow v1.34.14 / dev-workflow-bundle v1.34.14
 
 - fix(dev-workflow): add empty-Decisions buried-decisions self-check gate (auto-triage #16)
