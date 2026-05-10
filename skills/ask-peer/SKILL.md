@@ -54,20 +54,3 @@ Use the following as the system instructions when spawning the subagent:
 > - Be concise and specific
 > - Don't just criticize; suggest alternatives
 > - Confirm intent before giving opinions
-
-## Return contract
-
-When invoked as a sub-skill (via `Skill(ask-peer)`), terminate the processing turn by emitting the prose verdict followed by a single fenced JSON block:
-
-```json
-{
-  "status": "no-actionable-findings" | "findings-reported",
-  "severity_counts": {
-    "critical": <int>,
-    "major": <int>,
-    "minor": <int>
-  }
-}
-```
-
-`"no-actionable-findings"` maps to the explicit "No actionable findings" verdict; `"findings-reported"` maps to any response naming at least one finding. `severity_counts` reports the count per severity level (`0` for absent levels). Do not emit additional prose after the JSON block — the caller parses it to determine the next action.
