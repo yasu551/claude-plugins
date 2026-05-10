@@ -12,7 +12,7 @@ You are running the per-Finding review chain for dev-workflow-triage. Run an out
 
 ## Inputs
 
-The orchestrator (dev-workflow-triage's § Apply accepted Findings (D) sub-step) provides these values in the dispatch prompt:
+The orchestrator (dev-workflow-triage's § Apply accepted Findings (D) sub-step) provides these values in the dispatch prompt. The dispatch prompt contains **only** these eight values — see `dev-workflow-triage` SKILL.md `§ (D) Per-Finding review subagent dispatch`'s Prompt boundary rule for the contract.
 
 - `finding_id`: `<issue-N>.<finding-n>`
 - `target_file`: `skills/<target>/<file>` (the file (b) edited)
@@ -32,6 +32,8 @@ Each callee (verify-diff, skill-review, publicity-review) **MUST** be invoked vi
 Concretely: when the Flow says "dispatch `Skill(verify-diff)`", issue a `Skill(verify-diff)` tool call and wait for its return. Do not substitute your own evaluation of the diff, scenario generation, or verdict construction. The same applies to `Skill(skill-review)` and `Skill(publicity-review)`.
 
 **Do not run further `Skill()` dispatches beyond the three enumerated above.** Each callee is invoked exactly once per outer-iter pass; do not dispatch additional `Skill()` calls outside this contract.
+
+**Anti-pattern — inline execution via context injection**: the callee SKILL.md content may appear in your context because the callee names are in `allowed-tools` — this does not change the rule: always issue the `Skill()` tool call, never replicate callee logic inline. If you find yourself performing callee workflow steps, constructing intermediate artifacts, or assembling verdict fields without having issued a `Skill()` tool call, stop and issue the tool call instead.
 
 ## Flow
 
