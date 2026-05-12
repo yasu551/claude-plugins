@@ -154,6 +154,7 @@ At any point not listed above — including after `Skill(simplify)`, `Skill(rule
    - Step 10: Completion Hooks (only if `hooks.on_complete` is configured)
    Mark each item `in_progress` when starting and `completed` when done. Registering all phases upfront gives the user visibility into overall progress and prevents steps from being accidentally dropped. Implementation sub-tasks in Step 5 are additions, not replacements.
    Note: Unless `-i` / `--iterations` was explicitly specified, Step 2 may reduce N based on task difficulty.
+8. **Context-compaction recovery**: if the session context was compacted (prior turns summarized) before reaching this step in the current turn, re-read the configuration files from disk rather than relying on the summary — verify each step's skip conditions (e.g. whether `self_retrospective.feedback` is set, whether `hooks.on_complete` is configured) from the actual merged config, not from compacted context.
 
 ### Step 1.5: Task Decomposition
 
