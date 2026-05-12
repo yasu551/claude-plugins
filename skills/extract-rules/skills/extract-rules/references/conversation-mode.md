@@ -55,6 +55,10 @@ Look for user preferences and classify them:
 
 **3. Code review feedback**: Identify underlying philosophy or specific patterns
 
+**4. Routine re-application of existing patterns** → Skip (do NOT extract):
+   - Code added by following an established codebase pattern without user guidance or correction — symmetric code duplication, template expansion, mechanical extension of an existing structure
+   - Extract only when a new design decision was made, an exceptional case was handled, or the user explicitly corrected or redirected the approach
+
 ## Step C5: Append Principles and Patterns
 
 1. Read existing rule files (paths provided by main agent) to understand current rules
