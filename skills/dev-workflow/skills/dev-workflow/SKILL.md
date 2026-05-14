@@ -113,6 +113,10 @@ Each bullet names the gate and points to the authoritative definition site. When
 
 At any point not listed above — including after `Skill(simplify)`, `Skill(rules-review)`, `Skill(extract-rules)`, `Skill(run-tests)`, and reviewer skills return — the agent must never wait for the user to say "continue" / "続けて". Semantic judgment of the returned result is sufficient.
 
+### Progress Visibility
+
+When a long-running step (a subagent-backed skill call or multi-minute shell command) is about to start, emit a brief status message to the user naming what is starting — e.g. "Starting test run via run-tests…" or "Calling ask-peer for plan review (iteration 1 of N)…". This lets the user distinguish an agent in active progress from one that has stalled. After the step returns, proceed immediately to the next step per the No-Stall Principle — do not emit a separate acknowledgment turn.
+
 ### Step 1: Load Settings
 
 1. Read settings from up to three layers and merge (type-aware):
