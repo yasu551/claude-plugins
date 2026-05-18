@@ -193,7 +193,7 @@ If the `Agent` tool call itself errors, times out, or returns an empty response,
 
 ## Sub-skill caller directive
 
-This skill follows the same **terminal contract pattern** as `verify-diff` § Step 5 — Emit structured summary and `skill-review` § Return contract: a single fenced JSON block at the very end of the invocation. Only one fenced JSON block must appear in the response — the verdict block — so callers can locate it unambiguously. Do not produce any additional turn after the JSON.
+When invoked as a sub-skill (i.e. via `Skill(publicity-review)` from an orchestrator), the fenced JSON verdict block this skill emits is the **structured return value** of the skill's procedure — it is **not** a deliverable to the user, and emitting it does **not** terminate the orchestrator's turn. The same agent that ran this skill must immediately issue the next tool call dictated by the orchestrator's flow (see `dev-workflow-triage` SKILL.md `§ No-Stall Principle`; orchestrators that surface a per-callee guidance bullet — e.g. `dev-workflow-triage`'s `**Pre-invocation reminder**` — name the specific next action there). Do not insert a prose summary, an acknowledgment, or a "shall I proceed?" sentence between the JSON verdict and the next tool call. Only one fenced JSON block — the verdict block — appears in the response, so callers can locate it unambiguously. The skill's own procedure is over; the orchestrator's procedure continues without pause.
 
 When invoked from `dev-workflow-triage`'s `§ 3.4 Apply accepted Findings` (d3) bullet, the orchestrator parses the JSON and continues with sub-step (f) Scope check + stage. See `dev-workflow-triage` SKILL.md `§ No-Stall Principle` for the canonical no-stall write-up.
 

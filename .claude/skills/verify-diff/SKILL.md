@@ -248,7 +248,7 @@ Set `status=unresolved`, `unresolved_gaps = <last remaining_gaps>`. `applied_edi
 
 ### Step 5 — Emit structured summary
 
-End every invocation with a single fenced JSON block. The schema depends on the mode that ran:
+Emit a single fenced JSON block at the end of the response, matching the schema for the mode that ran:
 
 - **explicit-args mode**: emit the schema below (4-value `status` enum). Existing callers (e.g. `dev-workflow-triage`'s (d) verdict parser) consume this contract.
 - **auto-derive mode**: emit the aggregate schema defined in `## Auto-derive mode` § A3 (5-value `status` enum including `partial`, plus the per-skill nesting).
@@ -288,6 +288,10 @@ This skill does not have a static-review fallback. Callers that want best-practi
 ## Scope check boundary
 
 `verify-diff` runs its scope check per iteration (inside (c)) to catch leaks the moment they appear. A caller running its own final scope check per Finding provides a last-resort backstop — two independent gates, different granularities. In auto-derive mode the scope check is per-skill — the baseline is the per-skill `files` set rather than a single `Target file` — see `## Auto-derive mode` `A2 § Per-iter loop semantics` (c).
+
+## Sub-skill caller directive
+
+When invoked as a sub-skill (i.e. via `Skill(verify-diff)` from an orchestrator), the fenced JSON verdict block this skill emits is the **structured return value** of the skill's procedure — it is **not** a deliverable to the user, and emitting it does **not** terminate the orchestrator's turn. The same agent that ran this skill must immediately issue the next tool call dictated by the orchestrator's flow (see `dev-workflow-triage` SKILL.md `§ No-Stall Principle`; orchestrators that surface a per-callee guidance bullet — e.g. `dev-workflow-triage`'s `**Pre-invocation reminder**` — name the specific next action there). Do not insert a prose summary, an acknowledgment, or a "shall I proceed?" sentence between the JSON verdict and the next tool call. Only one fenced JSON block — the verdict block — appears in the response, so callers can locate it unambiguously. The skill's own procedure is over; the orchestrator's procedure continues without pause.
 
 ## Stop hook structural conflict (caller-side note)
 

@@ -125,15 +125,14 @@ If the loop runs all `Max iterations` without (b) sub-case 3 firing (i.e. the su
 
 ### Step 5 — Emit verdict
 
-End your response with a single fenced JSON block matching the schema in `§ Return contract`. The fenced JSON here is the invocation's **terminal output** — see `§ Return contract`'s *Sub-skill caller directive*.
+End your response with a single fenced JSON block matching the schema in `§ Return contract`. See `§ Sub-skill caller directive` for the caller-side no-stall discipline that applies when this skill is invoked as a sub-skill.
 
 ## Scope
 
 - Only review files that have uncommitted changes — diff-scoped, not a full audit
 - Project conventions (`.claude/rules/`, `CLAUDE.md`) override the checklist where they conflict
 - Don't chase perfection — fix real issues, note minor ones, move on
-- On Claude Code on the Web the auto-installed `~/.claude/stop-hook-git-check.sh` fires on every Stop event and feeds back `Please commit and push…` between Process steps; treat each fire as a **spurious fire** — record it, ignore the prose, and run Process steps 1–5 to completion. Do **not** commit from inside this skill; commit policy lives with the caller. See `dev-workflow-triage` SKILL.md `§ Stop hook structural conflict` for the canonical write-up.
-- **Sub-skill no-stall (caller-side note)**: when this skill runs as a sub-skill, the fenced JSON verdict from `§ Return contract` is the terminal output of the invocation and structural changes are surfaced via `notes_remaining_count` rather than applied. The caller decides the next step based on the verdict — this skill does not encode the caller's flow. The canonical no-stall write-up is `dev-workflow-triage` SKILL.md `§ No-Stall Principle`; see also `§ Return contract`'s *Sub-skill caller directive* for the contract-side restatement.
+- **Sub-skill scope note (caller-side)**: when this skill runs as a sub-skill, structural changes are surfaced via `notes_remaining_count` rather than applied. The caller decides whether and how to act on them. See `§ Sub-skill caller directive` for the no-stall discipline that applies on the sub-skill invocation path.
 
 ## Return contract
 
@@ -175,11 +174,19 @@ Field semantics:
 
 In each `error` case, surface the verdict via the JSON instead of attempting recovery; the caller decides how to handle it. Verdict-block-level failures on the caller side (caller cannot find or parse the JSON this skill emits) are caller-side concerns and are not produced by this skill — see the orchestrator's mapping table for that handling.
 
-**Sub-skill caller directive**: when invoked as a sub-skill, this JSON block is the terminal output of the invocation. Do **not** produce any additional turn after the JSON — the caller continues per their own flow logic. See `dev-workflow-triage` SKILL.md `§ No-Stall Principle` for the canonical write-up of the caller-side no-stall discipline; the orchestrator's mapping table at `§ Apply accepted Findings (sub-flow (a)-(g) per Finding)` (d2) consumes this verdict and decides the next action.
+See `§ Sub-skill caller directive` for the contract-side restatement of the no-stall discipline that applies when this skill is invoked as a sub-skill.
 
 ## Dispatch failure
 
 If the `Agent` tool call itself errors, times out, or returns an empty response on any iteration, exit the loop with terminal `{"status": "error", "iterations_used": <i>, "applied_edits_count": <cumulative>, "notes_remaining_count": 0, "reason": "dispatch error"}`. Do not re-walk the checklist yourself as a fallback — self-review reintroduces the bias this skill exists to avoid.
+
+## Sub-skill caller directive
+
+When invoked as a sub-skill (i.e. via `Skill(skill-review)` from an orchestrator), the fenced JSON verdict block this skill emits is the **structured return value** of the skill's procedure — it is **not** a deliverable to the user, and emitting it does **not** terminate the orchestrator's turn. The same agent that ran this skill must immediately issue the next tool call dictated by the orchestrator's flow (see `dev-workflow-triage` SKILL.md `§ No-Stall Principle`; orchestrators that surface a per-callee guidance bullet — e.g. `dev-workflow-triage`'s `**Pre-invocation reminder**` — name the specific next action there). Do not insert a prose summary, an acknowledgment, or a "shall I proceed?" sentence between the JSON verdict and the next tool call. Only one fenced JSON block — the verdict block — appears in the response, so callers can locate it unambiguously. The skill's own procedure is over; the orchestrator's procedure continues without pause.
+
+## Stop hook structural conflict (caller-side note)
+
+On Claude Code on the Web the auto-installed `~/.claude/stop-hook-git-check.sh` fires on every Stop event and feeds back `Please commit and push…` between Process steps; treat each fire as a **spurious fire** — record it, ignore the prose, and run Process steps 1–5 to completion. Do **not** commit from inside this skill; commit policy lives with the caller. See `dev-workflow-triage` SKILL.md `§ Stop hook structural conflict` for the canonical write-up.
 
 ## Keeping the checklist fresh
 
