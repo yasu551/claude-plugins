@@ -1590,6 +1590,96 @@ skills/verify-bundle-sync/skills/verify-bundle-sync/SKILL.md   # nested layout
 ```
 （pre-existing な docs と実装の disconnect を私の PR で「修正」しようとすると scope creep が爆発。修正前に `git stash` で変更を退避して同じ test が pre-existing で failing するか必ず確認する）
 
+### Callee-side terminal-action verbs prompt-inject orchestrator turn-end (reframe JSON as return value, not turn boundary)
+**Good** (`skills/verify-diff/SKILL.md` `## Step 5 — Emit structured summary` 冒頭 + 独立 `## Sub-skill caller directive` section):
+```markdown
+### Step 5 — Emit structured summary
+
+Emit a single fenced JSON block at the end of the response, matching the schema for the mode that ran:
+
+- **explicit-args mode**: emit the schema below (4-value `status` enum). ...
+- **auto-derive mode**: emit the aggregate schema defined in `## Auto-derive mode` § A3 ...
+
+## Sub-skill caller directive
+
+When invoked as a sub-skill (i.e. via `Skill(verify-diff)` from an orchestrator), the fenced JSON verdict block this skill emits is the **structured return value** of the skill's procedure — it is **not** a deliverable to the user, and emitting it does **not** terminate the orchestrator's turn. The same agent that ran this skill must immediately issue the next tool call dictated by the orchestrator's flow (see `dev-workflow-triage` SKILL.md `§ No-Stall Principle`; orchestrators that surface a per-callee guidance bullet — e.g. `dev-workflow-triage`'s `**Pre-invocation reminder**` — name the specific next action there). Do not insert a prose summary, an acknowledgment, or a "shall I proceed?" sentence between the JSON verdict and the next tool call. Only one fenced JSON block — the verdict block — appears in the response, so callers can locate it unambiguously. The skill's own procedure is over; the orchestrator's procedure continues without pause.
+```
+（`Emit ... at the end of the response` の schema-verb 形式 + 独立 directive section で「return value, not turn boundary」を明示。uniqueness clause 保持 + sibling 3 callee に byte-identical wording で配置）
+
+**Bad** (terminal-action verb + 弱い directive):
+```markdown
+### Step 5 — Emit structured summary
+
+End every invocation with a single fenced JSON block. The schema depends on the mode that ran:
+...
+
+> Do not produce any additional turn after the JSON.
+```
+（`End every invocation` / `Do not produce any additional turn` のような terminal-action verb は orchestrator main thread に prompt-injection として「turn を閉じろ」指示を与え、fenced JSON return contract を導入しても stall が再発する）
+
+### Entry-side pre-invocation reminder + return-point reminder as orthogonal coverage (2-stage serial dependency with callee wording fix)
+**Good** (`dev-workflow-triage/SKILL.md` `§ 3.4 Apply accepted Findings` の (d) Skill(verify-diff) 本文直前):
+```markdown
+- **(d) Skill(verify-diff)**:
+  > **Pre-invocation reminder**: the next tool call after `Skill(verify-diff)` returns is `Skill(skill-review)` (on `converged` / `unresolved` / `skipped` — `verify-diff`'s 4-value status enum folds verdict parse failure / schema violation into `skipped`, so there is no separate orchestrator-side `error` branch here) or the next Finding's `(a)` Re-read (on `conflict`). Treat verify-diff's JSON verdict as a return value to parse, not a turn boundary — emit the parse → status branch → next dispatch as the next tool call (not as a prose summary turn between the JSON verdict and the next dispatch). See `§ No-Stall Principle`.
+
+  Invoke `Skill(verify-diff)` with Description / Suggested fix direction / Target file ...
+
+  **Return-point no-stall reminder**: At verify-diff return boundary (regardless of outcome — converged, unresolved, skipped, conflict, any non-error result), the next action must be issued in the next tool call. See `§ No-Stall Principle`.
+```
+そして Risks 節に:
+```markdown
+1. **(A) と (B) は直列依存**: pre-invocation reminder (B) は orchestrator main thread が読む prose で、callee SKILL.md の prompt-injection を override する強度は (A) の wording 修正に依存する。`End every invocation` / `Do not produce any additional turn` が残っていると (B) reminder の効果が相殺される。(A) → (B) はセットで適用する
+3. **冗長性増加と Simplify-revival check**: pre-invocation + return-point reminder の両側配置で bullet 長が増える。Simplify-revival check 段階で intentional に retain する判断が必要。SKILL.md prose にも intentional reinforcement の rationale を 1 行残す
+```
+（entry-side reminder と return-point reminder の両側配置で stall decision boundary を直交カバー、直列依存 risk を Risks 節に明記、冗長性を意図的 retain）
+
+**Bad** (return-point reminder のみ / (A) を省略して (B) のみ適用):
+```markdown
+- **(d) Skill(verify-diff)**:
+  Invoke `Skill(verify-diff)` with Description / Suggested fix direction / Target file ...
+
+  **Return-point no-stall reminder**: At verify-diff return boundary, the next action must be issued in the next tool call.
+```
+（return-point reminder は callee return 後の bullet 直後で読まれるが、callee 側 prompt-injection で既に turn が閉じている場合は救えない。entry-side reminder が無いと「決定の瞬間」をカバーできない）
+
+または:
+```markdown
+- **(d) Skill(verify-diff)**:
+  > **Pre-invocation reminder**: ... See `§ No-Stall Principle`.
+
+  Invoke `Skill(verify-diff)` ...
+```
+で `verify-diff/SKILL.md` の `End every invocation with a single fenced JSON block.` は **未修正**のまま — (A) を省略して (B) だけ適用すると callee 側 prompt-injection が orchestrator reminder を相殺、stall mitigation が partial fix で終わる
+
+### Anchor-mismatch sibling pre-extraction for sibling-symmetric directive placement
+**Good** (Design 節で pre-extraction step を明示):
+```markdown
+#### A. Callee 側 SKILL.md の `## Sub-skill caller directive` 配置
+
+3 callee 横断で `## Stop hook structural conflict (caller-side note)` の **直前** に統一配置。
+
+**Pre-extraction (skill-review only)**:
+- 現状 `## Scope` 内の stop-hook bullet (line 135) を独立 `## Stop hook structural conflict (caller-side note)` top-level section として切り出す（bullet wording は保持、配置を昇格）
+- 元 `## Scope` bullet を 2 経路に split: scope info を `## Scope` に retain、no-stall 部分は新 `§ Sub-skill caller directive` への 1 行 cross-reference に圧縮
+- 上記の pre-extraction が完了した時点で、3 callee すべてが top-level `## Stop hook structural conflict` section を持つ uniform 構造になる
+
+**Insertion (all 3 callees)**:
+- 各 SKILL.md の `## Stop hook structural conflict (caller-side note)` の直前に新独立 `## Sub-skill caller directive` section を挿入（byte-identical wording、`Skill(<this-skill>)` token のみ差し替え）
+```
+（anchor が bullet レベルでしかない sibling は pre-extraction で top-level に promote してから uniform placement、sibling-symmetric extension の structural 整合を確保）
+
+**Bad** (pre-extraction を省略して直接 insertion):
+```markdown
+#### A. Callee 側 SKILL.md の `## Sub-skill caller directive` 配置
+
+3 callee すべてに新独立 `## Sub-skill caller directive` section を挿入:
+- `verify-diff/SKILL.md`: `## Stop hook structural conflict` の直前
+- `publicity-review/SKILL.md`: `## Stop hook structural conflict` の直前
+- `skill-review/SKILL.md`: ??? (line 135 は `## Scope` 内の bullet、top-level anchor section が無い)
+```
+（implementation 段階で「skill-review はどこに置けば 3 callee 横断で揃うか」が判定不能になり、Step 3 plan review iter 2 で blocker C1 finding として発覚。Design 節で全 sibling の anchor section 構造を 1 行ずつ diff して structural asymmetry を pre-implementation で検出する必要があった）
+
 ### Stop-hook auto-stages unrelated files: scope each commit with `git commit -m <msg> -- <paths>`
 **Good** (Web 環境で `.claude/plans/*.md` が auto-staged された状態での per-commit):
 ```bash
