@@ -294,7 +294,7 @@ Implementation often introduces unnecessary complexity that's easier to spot in 
 
 Dedicated rules compliance check, separate from code review (Step 8). This ensures rule enforcement gets focused attention rather than competing with correctness and design concerns.
 
-1. `Skill(rules-review)` with `--base-commit <sha>` (base-commit recorded in Step 2) via `$ARGUMENTS`
+1. **Always invoke `Skill(rules-review)` with `--base-commit <sha>` (base-commit recorded in Step 2) via `$ARGUMENTS`.** Do not substitute an inline rules-walk based on perceived scope, change size, or any other self-judgment of the diff's complexity — small / "obvious" / single-file changes still go through the external skill. The skip-to-fallback path is documented in Prerequisites and fires only on objective skill unavailability (the `Skill(rules-review)` call itself fails after one retry), never on subjective judgment that an inline equivalent would suffice. The external skill enforces consistent coverage across runs; inline substitution silently degrades that coverage and the user has no visible signal that it happened.
 2. Judge the result semantically: if the skill reports that there is nothing to act on — no actionable violations, no changed files, no applicable rules, no rule files found, or any other "nothing to report" outcome regardless of exact wording — mark `Step 7.5: Rules Compliance Review` as `completed` and proceed to Step 8 automatically. Per the No-Stall Principle, do not wait for user input and do not rely on exact-phrase matching; trust semantic judgment since the skill's phrasing may evolve across versions.
 3. If violations found:
    a. Fix all reported violations
