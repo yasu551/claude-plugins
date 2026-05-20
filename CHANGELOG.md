@@ -2,6 +2,10 @@
 
 ## 2026-05-20
 
+### dev-workflow v1.39.0 / dev-workflow-bundle v1.39.0
+
+- feat(dev-workflow): add `compact_rules` config (default `false`) gating Step 11 sub-step 3 (Char-count compaction gate). **Default: disabled** — the compaction mode added in v1.38.0 is currently experimental; set `compact_rules: true` in `.claude/dev-workflow.md` or `.claude/dev-workflow.local.md` to opt in per project. When disabled (default), `Skill(extract-rules) --compact` is never invoked, the compaction approval gate never opens, and § Completion's compaction reminder is automatically omitted. **Behavior change from v1.38.0**: users who adopted v1.38.0 compaction must explicitly set `compact_rules: true` to retain that behavior.
+
 ### extract-rules v1.14.0 / dev-workflow-bundle v1.38.0
 
 - feat(extract-rules): add Compaction Mode (`--compact`) — compacts `<output_dir>/**/*.md` files that exceed `compaction_threshold` (default `32000` chars, 80% of Claude Code's 40k per-file warning observed in 2.1.x). Pattern A iteration loop (max_iterations=2 default) with subagent-side `mechanical_edits` / `structural_notes` schema and main-thread `Edit` application. Heuristics: class-level extension merge / similar-entry merge / example reference extraction / one-shot incident dropout. Fenced JSON return contract emitted for sub-skill caller dispatch (used by `dev-workflow` Step 11 char-count compaction gate).
