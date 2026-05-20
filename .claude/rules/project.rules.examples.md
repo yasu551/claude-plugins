@@ -1694,3 +1694,72 @@ Step 9 に gate を組み込みます。
 （Step 11 compaction approval が抜けたまま）
 ```
 （preamble が間違った gate set を表示、user-gate summary を読んだ user / reviewer が「Step 11 で gate が立つはずなのに preamble に無い」と confused になる）
+
+### Experimental feature → opt-in default `false` heuristic (overrides sibling-config consistency)
+**Good** (Plan Decisions § 2 + CHANGELOG):
+```markdown
+#### Decision 2. デフォルト値（**user 既選択: `false`（opt-in）— Step 4 gate にて**）
+- **Recommendation**: `false`（opt-in、user が Step 4 gate でこちらを選択）。v1.38.0 で導入された compaction mode は実験的で未だ実証実験段階のため、デフォルトでは走らせず、特定プロジェクトで `compact_rules: true` を明示した時だけ有効化する
+- **Alternative**: `true`（opt-out）。既存 sibling 設定（`interactive_commits` / `task_decomposition` ともデフォルト `true`）と整合し、後で実証実験が成功した際の自然な default
+```
+そして CHANGELOG entry:
+```markdown
+- feat(dev-workflow): add `compact_rules` config (default `false`) gating Step 11 sub-step 3. **Default: disabled** — the compaction mode added in v1.38.0 is currently experimental; set `compact_rules: true` in `.claude/dev-workflow.md` to opt in per project. **Behavior change from v1.38.0**: users who adopted v1.38.0 compaction and want to retain that behavior must explicitly set `compact_rules: true`.
+```
+（experimental 機能のため sibling-config consistency より安全側を優先して default `false` に倒す。CHANGELOG で v<prior> reversal を first-line に明示）
+**Bad**:
+```markdown
+#### Decision N. デフォルト値
+- **Recommendation**: `true`（opt-out）— 既存 sibling 設定が全て default `true` のため一貫性維持
+```
+（既存 sibling が `true` だからと自動的に opt-out に倒すと、未検証 experimental 機能が全 user で unconditional に走り、想定外の副作用が出る）
+
+### Decision insertion (not swap) for previously-unstated default-value choice at Step 4 gate
+**Good** (元プランに Decisions § 2 が無く、user が Step 4 で default 反転を要求した case):
+```markdown
+# 元プラン
+### Decisions
+#### Decision 1. 設定キー名
+- Recommendation: `compact_rules`
+- Alternative: `extract_rules_compact`
+
+# 元プランで default = `true` は Approach 内に暗黙に書いていたが Decisions に立てていなかった
+
+# Step 4 user-gate で user が「default を false にしたい」と要求 → 新 Decision を insert
+### Decisions
+#### Decision 1. 設定キー名（変更なし）
+- Recommendation: `compact_rules`
+- Alternative: `extract_rules_compact`
+
+#### Decision 2. デフォルト値（**user 既選択: `false`（opt-in）— Step 4 gate にて**）
+- Recommendation: `false`（opt-in、user 選択）
+- Alternative: `true`（opt-out、sibling-config 整合）
+```
+（元プランに Decision として存在しなかった選択を新 Decision § N+1 として insert。両 option を visible に保ち、user 選択を Recommendation 側に annotation で明示）
+**Bad** (swap rule を機械的に適用):
+```markdown
+#### Decision 1. 設定キー名 → デフォルト値（無理矢理 swap）
+- Recommendation: default `false`（user 選択）
+- Alternative: default `true`
+```
+（元の Decision 1 が「設定キー名」だったのに無理矢理 default value 議論で上書き。元 Decisions の structure が壊れる）
+
+### Live validation via current workflow run's own subsequent steps
+**Good** (Test plan + Out-of-scope reject notes):
+```markdown
+### Test plan
+5. **挙動の live validation（本走行で natural に exercise）**: `.claude/dev-workflow.md` に `compact_rules` 未指定 → 新デフォルト `false` → 本走行の Step 11 sub-step 3 が skip path を通る。A-5 ガードと bilingual informational note の実発火を本走行自身で検証
+
+### Out-of-scope reject notes
+- **`.claude/dev-workflow.md` への `compact_rules: true` 明示追加は別タスク**: 本走行で default `false` 検証を exercise させるため意図的にスコープ外
+```
+（本走行自身が dogfooding で新 default を natural に exercise するため manual verification 不要。Out-of-scope reject notes で live validation を保護）
+**Bad** (`.claude/dev-workflow.md` に `compact_rules: true` を同 PR で追加 + manual verification を Test plan に書く):
+```markdown
+### Test plan
+5. **挙動の手動検証**: 別 session を立てて `compact_rules: true` / `compact_rules: false` / 未指定 の 3 パターンで Step 11 sub-step 3 の skip / 実行を確認する
+
+### 同 PR の追加変更
+- `.claude/dev-workflow.md` に `compact_rules: true` を明示追加（本走行で skip path を確認できるように）
+```
+（本走行で本来 exercise できる skip path を `.claude/dev-workflow.md` への `true` 明示追加で潰してしまい、live validation 機会を失う + 別 session manual verification の手間を発生させる）
