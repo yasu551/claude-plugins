@@ -136,6 +136,49 @@ Reference templates for each mode's output report.
 - Functional style - Already documented
 ```
 
+## Compaction Mode (Step CP4)
+
+Compaction Mode returns a fenced JSON block (the only output) — not a Markdown report. See `SKILL.md` § Step CP4: Emit Structured Summary for the canonical schema. The main thread (caller) renders human-readable output if needed; the fenced JSON is the machine-readable contract.
+
+**Human-readable rendering examples** (illustrative — the caller chooses the format):
+
+`status: "compacted"` (typical success path):
+
+```text
+Compaction complete (threshold: 32000 chars)
+
+- .claude/rules/project.rules.local.md: 47600 → 31200 chars (under threshold, converged in 2 iters, 12 edits)
+- .claude/rules/project.rules.examples.md: 97000 → 30800 chars (under threshold, converged in 2 iters, 28 edits)
+
+Total: 2 files compacted, 82600 chars saved
+```
+
+`status: "compacted"` with mixed per-file outcomes:
+
+```text
+Compaction partial (threshold: 32000 chars)
+
+- .claude/rules/project.rules.local.md: 47600 → 31200 chars (under threshold, converged in 2 iters, 12 edits)
+- .claude/rules/project.rules.examples.md: 97000 → 45000 chars (over threshold, partial in 2 iters, 18 edits)
+  → 1 structural_note: consider splitting examples into per-language files
+
+Total: 2 files processed, 1 under threshold, 1 still over threshold
+```
+
+`status: "no-actionable"`:
+
+```text
+No compaction needed — no files exceed threshold (32000 chars)
+```
+
+`status: "error"`:
+
+```text
+Compaction failed: <reason>
+```
+
+Each per-file entry's `per_file_status` carries the loop outcome (`converged` / `partial` / `unresolved` / `error` / `skipped-below-threshold`); the caller uses this to surface follow-up actions to the user (e.g. via a user-gate that accepts/rejects per file). The `skipped-below-threshold` value appears only in explicit-paths mode for caller-passed paths whose char count was already at or below `compaction_threshold` (see SKILL.md § Step CP1 step 3).
+
 ## PR Review Extraction Mode (Step P5)
 
 **Single PR:**

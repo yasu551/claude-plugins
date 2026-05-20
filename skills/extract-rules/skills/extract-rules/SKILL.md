@@ -2,7 +2,7 @@
 name: extract-rules
 description: Extract project-specific coding rules and domain knowledge from existing codebase, generating markdown documentation for AI agents. Use when onboarding a new project, after code review discussions about coding style, or when coding conventions need documenting. Also consider running after sessions where coding preferences were discussed or corrected (--from-conversation), or after PRs with significant review feedback (--from-pr).
 model: opus
-allowed-tools: Read, Glob, Grep, Write, Bash(ls *), Bash(mkdir *), Bash(git ls-files *), Bash(wc *), Bash(head *), Bash(tail *), Bash(sort *), Bash(uniq *), Bash(tree *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh api *), Bash(gh auth status *), Bash(gh repo view *), Bash(node *)
+allowed-tools: Read, Glob, Grep, Write, Edit, Agent, TodoWrite, Bash(ls *), Bash(mkdir *), Bash(git ls-files *), Bash(git checkout HEAD -- *), Bash(wc *), Bash(head *), Bash(tail *), Bash(sort *), Bash(uniq *), Bash(tree *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh api *), Bash(gh auth status *), Bash(gh repo view *), Bash(node *)
 ---
 
 # Extract Rules
@@ -21,6 +21,8 @@ Analyzes existing codebase to identify what Claude would get wrong without proje
 /extract-rules --from-pr owner/repo#123        # PR in another repo (URL form also accepted)
 /extract-rules --from-pr 100..110              # PR range (current repo)
 /extract-rules --from-pr owner/repo#100..110   # PR range (another repo)
+/extract-rules --compact                       # Compact all over-threshold rules files (output_dir/**/*.md)
+/extract-rules --compact path/to/file.md ...   # Compact specific files (caller passes explicit paths)
 # Multiple specs allowed (space-separated) → cross-analysis detects org-wide principles
 ```
 
@@ -39,6 +41,7 @@ Settings file: `extract-rules.local.md` (YAML frontmatter only, no markdown body
 | `language` | `ja` | Report language (e.g., `ja`) |
 | `split_output` | `true` | Separate Principles (.md) and patterns (.local.md) |
 | `resolve_references` | `true` | Resolve file references during restructure |
+| `compaction_threshold` | `32000` | Char count threshold for `--compact` mode (file is compacted if char count exceeds this). Set to a very large number (e.g. `99999999`) to opt out of compaction. The default `32000` is 80% of Claude Code's per-file warning threshold (40k chars, observed in Claude Code 2.1.x) to leave headroom for subsequent rule additions |
 
 ```yaml
 ---
@@ -53,6 +56,7 @@ output_dir: .claude/rules
 language: ja
 split_output: true
 resolve_references: true
+compaction_threshold: 32000
 ---
 ```
 
@@ -132,6 +136,7 @@ Check arguments to determine mode:
 - `--update` → **Update Mode** (Step U1-U6)
 - `--restructure` → **Restructure Mode** (Step R1-R5)
 - `--from-conversation [session-id]` → **Conversation Extraction Mode** (Step C1-C5)
+- `--compact [<paths>]` → **Compaction Mode** (Step CP1-CP5)
 - `--from-pr <number|owner/repo#number|range> [...]` → **PR Review Extraction Mode** (Step P1-P5)
 
 ---
@@ -150,7 +155,7 @@ Search for `extract-rules.local.md`:
 - If only one exists, use that file
 - If neither exists, use default settings
 
-**Extract settings** (`target_dirs`, `exclude_dirs`, `exclude_patterns`, `output_dir`, `language`, `split_output`, `resolve_references`) from the config file. See Configuration section above for defaults.
+**Extract settings** (`target_dirs`, `exclude_dirs`, `exclude_patterns`, `output_dir`, `language`, `split_output`, `resolve_references`, `compaction_threshold`) from the config file. See Configuration section above for defaults.
 
 **`language` resolution:** skill config → Claude Code settings (`~/.claude/settings.json` `language` field) → default `ja`
 
@@ -472,6 +477,128 @@ After the subagent completes, report the results to the user.
 
 ---
 
+## Compaction Mode
+
+When `--compact` is specified, compact over-threshold rules files so they stay below Claude Code's per-file warning threshold (40k chars in Claude Code 2.1.x). Target file selection, char-count check, and threshold filtering all happen inside this mode — callers (e.g. `dev-workflow` Step 11) invoke `--compact` without file arguments and let this mode resolve the target set.
+
+Use the Pattern A iteration loop convention (sibling to `verify-diff` / `publicity-review` / `skill-review`): the Skill wrapper runs in the main thread, a subagent performs the compaction analysis, the main thread applies the resulting `mechanical_edits`, and a fenced JSON return contract is emitted for caller dispatch. Per-file outer loop with `max_iterations = 2` (default).
+
+### Step CP1: Load Settings and Resolve Targets
+
+1. Load settings from `extract-rules.local.md` (same as Step 1 in Full Extraction Mode). Also read `compaction_threshold` (default `32000`)
+2. Check the output directory exists. If not, emit `{"status": "error", "reason": "output directory not found"}` and stop
+3. Resolve targets:
+   - With explicit path arguments (caller-passed paths): use those paths. For each, `Read` the file content and measure its char count via the `Read` output length (do **not** use `Bash(wc -m)` — `Read` length matches Claude Code's char-count metric, while `wc -c` reports bytes which diverge for multi-byte content). Paths whose char count is `≤ compaction_threshold` are added **directly** to `files_processed` (they do **not** enter the Step CP2 iteration loop) as informational skip entries with the following fixed shape: `per_file_status: "skipped-below-threshold"`, `iterations_used: 0`, `applied_edits_count: 0`, `structural_notes: []`, `chars_before` = `chars_after` = the measured char count, `below_threshold: true`. Over-threshold paths join the Step CP2 target set as usual
+   - Without arguments: `Glob <output_dir>/**/*.md` (covers `.md` / `.local.md` / `.examples.md` uniformly — the glob does not distinguish by extension). For each file, `Read` and measure its char count; collect entries with char count `> compaction_threshold` into the target set. **Note**: discovery mode does **not** surface sub-threshold files in `files_processed` (they are silently filtered out) — only the explicit-paths branch above adds them as informational skip entries. This asymmetry is intentional: an unargumented `--compact` invocation reports only files that actually crossed the threshold, while caller-passed paths report every path the caller named so the caller can correlate input to output
+
+   Cache the per-file `Read` content keyed by path for reuse in Step CP2 (a) iter 1's dispatch payload — avoids a second `Read` of the same file before the first subagent dispatch
+4. If the target set is empty (no over-threshold files), emit `{"status": "no-actionable", "compaction_threshold": <int>, "files_processed": <informational skip entries from step 3, or [] in discovery mode>, "reason": "no files exceed threshold"}` and stop. In explicit-paths mode, `files_processed` carries the sub-threshold `skipped-below-threshold` entries collected in step 3 so the caller can correlate every input path to an output entry; in discovery mode (no path arguments) it is `[]` since sub-threshold files are silently filtered
+
+### Step CP2: Per-File Compaction (Pattern A iteration loop)
+
+**Pre-register per-file TodoWrite items** — before entering the per-file outer loop, create one TodoWrite row per over-threshold file in the target set (e.g. `compact: <path>`). Mark each row `in_progress` before its first dispatch and `completed` after the per-file loop terminates (regardless of `per_file_status` outcome — `converged` / `partial` / `unresolved` / `error` all flip the row to `completed`; the outcome is carried in the per-file record, not the TodoWrite status). Per-iter progress within a file is tracked inline within this Step (no per-iter TodoWrite row) because the iter count is bounded at `max_iterations = 2`. Sub-threshold skip entries from Step CP1 step 3 are not added to TodoWrite because they bypass this loop entirely.
+
+For each over-threshold file in the target set, run the per-file iteration loop. `max_iterations = 2` by default (compaction is judgment-heavy; two passes give the subagent a chance to refine its first attempt before declaring `partial`).
+
+**(a) Read & dispatch (per-iter)**: On iter 1, reuse the cached content from Step CP1 step 3 — `chars_before` is that cache entry's char count (avoids re-reading the same file). On iter `i ≥ 2`, re-`Read` the target file so the subagent operates on the post-prior-iter content. Spawn an `Agent` (`subagent_type: general-purpose`) with the dispatch prompt assembled from these `--- LABEL ---` sections (same fence convention as `verify-diff` Step 3 dispatch):
+
+- `--- TARGET FILE ---`: absolute path + full current content
+- `--- COMPACTION HEURISTICS ---`: the four heuristics enumerated in `references/compaction-mode.md` (class-level extension merge / similar-entry merge / example reference extraction / one-shot incident dropout)
+- `--- TARGET CHARS ---`: the resolved `compaction_threshold`
+- `--- ITER INFO ---`: current iter number (1 or 2), `max_iter` (2). On iter 2, also include a one-line summary of what iter 1 applied (the count of `mechanical_edits` landed and the iter-1 `chars_after` figure) so the subagent can plan an additional pass
+- `--- COMPACTOR PROMPT ---`: the subagent instructions, including the `mechanical_edits` `old_string` uniqueness convention (1–3 lines of surrounding context, per the `verify-diff` convention). Include the body verbatim from `references/compaction-mode.md`
+- `--- RESPONSE FORMAT ---`: the fenced JSON schema the subagent must emit (per-iter response, not the top-level skill return shape)
+
+**(b) Parse**: parse the subagent's fenced JSON response. Evaluate in this order, **first match wins** (same evaluate-in-order discipline as `verify-diff` § (b) Parse & apply):
+
+1. **Verdict missing or malformed** — no fenced JSON block found, or JSON parse fails → terminate this file's loop with per-file `status: "error"`, `reason: "verdict parse failure"`
+2. **Schema violation** — required keys (`mechanical_edits`, `structural_notes`) are missing, values are not arrays, or any entry fails its expected shape (each `mechanical_edits` entry needs non-empty string `file`, `old_string`, `new_string`; each `structural_notes` entry needs non-empty string `file`, `description`, `rationale`) → terminate with per-file `status: "error"`, `reason: "verdict schema violation"`. Validating entry shape here prevents a malformed entry from crashing the `Edit` call later
+3. **Divergence (iter `i ≥ 2`)** — the `(remaining_edits_count, structural_notes_count)` multiset matches iter `i − 1`'s same multiset (the subagent is not making forward progress) → terminate with per-file `status: "unresolved"`, `reason: "no progress between iters"`
+4. **Otherwise** — proceed to apply
+
+**(c) Apply (per-iter)**: for each entry in `mechanical_edits`, re-`Read` the target file (so `old_string` matches the current contents after any earlier edit in this iter), then call `Edit`. **Scope rail**: before each `Edit`, verify the entry's `file` equals the target file's path; if not, skip that entry (no working-tree write) and record the rejected path. This mirrors `verify-diff` Auto-derive A2 (c) Scope rail. If `old_string` is not found, skip that entry — this is the expected no-op fallback for overlapping edits emitted from the same iter-1 snapshot. Increment the iter-level `applied_edits_count` only for entries whose `Edit` call succeeded
+
+**(d) Per-iter convergence check**: re-`Read` the target file to measure `chars_after_iter_i`. If `chars_after_iter_i ≤ compaction_threshold`, the file is **converged**; terminate the loop with per-file `status: "converged"`
+
+**(e) Continue or terminate**: if `i < max_iterations` and not converged, proceed to iter `i + 1` (back to (a)). If `i == max_iterations` and not converged, terminate the loop with per-file `status: "partial"` (the file was reduced but did not reach the threshold)
+
+**(f) Per-file record**: at file completion, aggregate:
+
+- `path`, `chars_before`, `chars_after` (the latest measured), `iterations_used`
+- `applied_edits_count` (sum across iters)
+- `structural_notes` — captured from iter 1 only (treat iter 1 as the source of truth; iter 2 re-runs the heuristics on already-modified content and may return drifted notes — same `inferred_intent persistence` discipline as `verify-diff`). If iter 1 produced no parseable verdict (terminated via the (b) error paths), `structural_notes` is `[]`
+- `per_file_status` ∈ {`converged`, `partial`, `unresolved`, `error`, `skipped-below-threshold`} (the last value is set **only** by Step CP1 step 3's explicit-paths branch for informational skip entries — the Step CP2 loop runs exclusively on over-threshold files and therefore never produces it)
+- `below_threshold` = `chars_after ≤ compaction_threshold`
+- `reason` (set only when `per_file_status ∈ {error, unresolved}`; omitted otherwise — including for `converged` / `partial` / `skipped-below-threshold`)
+
+**Important**: `structural_notes` are **not applied** by this mode — they are surfaced as caller-judgment notes (the caller, e.g. `dev-workflow` Step 11 user-gate, decides whether to act). This matches the `skill-review` semantic for structural notes.
+
+### Step CP3: Security Self-Check
+
+Run Security Self-Check (same as Step 6.5 in Full Extraction Mode) on all modified files. If any sensitive content is detected, revert the file via `Bash(git checkout HEAD -- <path>)` and record the file in `files_processed` with the following fixed shape (mirrors the fully-enumerated form Step CP1 step 3 uses for `skipped-below-threshold` entries — both branches override or replace the per-file record produced by Step CP2 (f)):
+
+- `path`: the reverted file's path
+- `per_file_status: "error"`
+- `reason: "security check failed"`
+- `applied_edits_count: 0` (the revert wiped this file's landed edits — they no longer exist on disk)
+- `iterations_used`: the count of iters whose subagent dispatch returned a verdict before the revert (carry over from Step CP2 (f))
+- `structural_notes`: carry over from Step CP2 (f) (iter-1 captured notes survive the revert because they are caller-judgment notes about the file's prose, not edits that were wiped)
+- `chars_before`: the pre-Step-CP2 measurement (carry over from Step CP2 (f))
+- `chars_after`: the post-revert measurement, which equals `chars_before` since the revert restored the file to its pre-edit state
+- `below_threshold`: recomputed against the post-revert `chars_after` (so this matches whatever the file's threshold relation was before Step CP2 ran)
+
+### Step CP4: Emit Structured Summary
+
+Emit a single fenced JSON block at the end of the response, matching the schema:
+
+```json
+{
+  "status": "compacted" | "no-actionable" | "error",
+  "compaction_threshold": <int>,
+  "files_processed": [
+    {
+      "path": "<abs-path>",
+      "chars_before": <int>,
+      "chars_after": <int>,
+      "iterations_used": <int>,
+      "applied_edits_count": <int>,
+      "structural_notes": [
+        {"description": "<str>", "rationale": "<str>"}
+      ],
+      "per_file_status": "converged" | "partial" | "unresolved" | "error" | "skipped-below-threshold",
+      "below_threshold": <bool>,
+      "reason": "<optional, required when per_file_status=error or unresolved>"
+    }
+  ],
+  "reason": "<optional, required when top-level status=error>"
+}
+```
+
+Top-level `status` mapping:
+
+- `compacted`: at least one file in `files_processed` has `applied_edits_count > 0`
+- `no-actionable`: the target set was empty, or every file ended with `applied_edits_count == 0` (including all-error / all-skipped cases)
+- `error`: top-level dispatch error (e.g. settings load failure, output directory missing). Per-file dispatch errors do not propagate to the top — they appear inside `files_processed` with `per_file_status: "error"` under top-level `status: "compacted"` (when at least one other file applied edits) or `status: "no-actionable"` (when no file applied any edits)
+
+`reason` enum (closed list — callers may switch on these values deterministically):
+
+- Per-file `reason` (set when `per_file_status ∈ {error, unresolved}`):
+  - `"verdict parse failure"` — subagent response had no fenced JSON block or failed to parse (Step CP2 (b) #1)
+  - `"verdict schema violation"` — required keys missing, values not arrays, or entry shape failed (Step CP2 (b) #2)
+  - `"no progress between iters"` — divergence check on iter `i ≥ 2` matched the prior iter's multiset (Step CP2 (b) #3)
+  - `"security check failed"` — Step CP3 detected sensitive content and reverted the file
+- Top-level `reason` (set when `status == "error"`):
+  - `"output directory not found"` — Step CP1 step 2 directory check failed
+  - `"no files exceed threshold"` — used with `status: "no-actionable"` from Step CP1 step 4 (top-level `reason` is optional in `no-actionable`; this token is its canonical value)
+
+Partial results: when top-level `status: "compacted"`, individual files in `files_processed` may carry `per_file_status` of `error` / `unresolved` / `partial` / `skipped-below-threshold` mixed with `converged`. Callers should branch on `per_file_status` per file rather than assume uniform success. (`skipped-below-threshold` appears only in explicit-paths mode, where caller-passed paths under the threshold are surfaced verbatim — see Step CP1 step 3.)
+
+### Step CP5: Sub-skill caller directive
+
+See § Sub-skill caller directive at the bottom of this SKILL.md.
+
+---
+
 ## PR Review Extraction Mode
 
 When `--from-pr` is specified, extract rules from PR review comments (human comments only).
@@ -484,3 +611,17 @@ Read `references/pr-review-mode.md` for the full processing steps (P1-P5). Key f
 4. Extract principles and patterns (same criteria as `references/extraction-criteria.md`)
 5. **Multiple PRs**: Cross-PR frequency analysis — general best practices that are repeatedly pointed out across different PRs are promoted as organizational emphasis (reframed with specific application context, not just restated)
 6. Append to existing rule files and update `.examples.md` (same as Step C5)
+
+---
+
+## Sub-skill caller directive
+
+When invoked as a sub-skill (i.e. via `Skill(extract-rules)` from an orchestrator such as `dev-workflow` Step 11), the fenced JSON verdict block this skill emits in `--compact` mode is the **structured return value** of the skill's procedure — it is **not** a deliverable to the user, and emitting it does **not** terminate the orchestrator's turn. The same agent that ran this skill must immediately issue the next tool call dictated by the orchestrator's flow (see `dev-workflow` SKILL.md `§ No-Stall Principle`; orchestrators that surface a per-callee guidance bullet — e.g. `dev-workflow`'s `**Pre-invocation reminder**` at Step 11's `**Char-count compaction gate**` paragraph — name the specific next action there). Do not insert a prose summary, an acknowledgment, or a "shall I proceed?" sentence between the JSON verdict and the next tool call. Only one fenced JSON block — the verdict block — appears in the response, so callers can locate it unambiguously. The skill's own procedure is over; the orchestrator's procedure continues without pause.
+
+This directive applies specifically to `--compact` mode. Other modes (Full Extraction, Update, Restructure, Conversation, PR Review) produce prose reports rather than fenced JSON verdicts and are not subject to this contract.
+
+---
+
+## Stop hook structural conflict (caller-side note)
+
+If a `~/.claude/stop-hook-git-check.sh` style Stop hook is registered, it may fire mid-dispatch with uncommitted-change feedback. This is a known structural conflict between non-interactive orchestrator flows (such as `dev-workflow` Step 11) and per-turn hooks — see `§ Stop hook structural conflict` in `dev-workflow` SKILL.md (the canonical orchestrator for `--compact` invocations; `dev-workflow-triage` carries a parallel section for its own per-Finding flow). Ignore such feedback and continue the prescribed flow; per-file flow runs that complete the orchestrator's sub-step boundaries are the canonical completion signal.
