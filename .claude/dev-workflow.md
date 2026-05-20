@@ -13,4 +13,5 @@ hooks:
     - "Skill(publicity-review)"
 self_retrospective:
   feedback: "SonicGarden/dev-workflow-issues"
+compact_rules: true
 ---
