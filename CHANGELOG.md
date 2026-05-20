@@ -2,6 +2,16 @@
 
 ## 2026-05-20
 
+### extract-rules v1.14.0 / dev-workflow-bundle v1.38.0
+
+- feat(extract-rules): add Compaction Mode (`--compact`) — compacts `<output_dir>/**/*.md` files that exceed `compaction_threshold` (default `32000` chars, 80% of Claude Code's 40k per-file warning observed in 2.1.x). Pattern A iteration loop (max_iterations=2 default) with subagent-side `mechanical_edits` / `structural_notes` schema and main-thread `Edit` application. Heuristics: class-level extension merge / similar-entry merge / example reference extraction / one-shot incident dropout. Fenced JSON return contract emitted for sub-skill caller dispatch (used by `dev-workflow` Step 11 char-count compaction gate).
+- feat(extract-rules): add `compaction_threshold` setting to `extract-rules.local.md` (default `32000`). Set to a very large number (e.g. `99999999`) to opt out of compaction.
+
+### dev-workflow v1.38.0 / dev-workflow-bundle v1.38.0
+
+- feat(dev-workflow): add Step 11 char-count compaction gate — invokes `Skill(extract-rules) --compact` (no file arguments; extract-rules resolves the target set internally). **Default: enabled** — set `compaction_threshold: 99999999` in `.claude/extract-rules.local.md` (or `~/.claude/extract-rules.local.md`) to opt out. The gate presents per-file diff under a new user-approval gate (`Step 11 compaction approval gate`); accept keeps working-tree changes (file count surfaced via the new Completion-summary "Step 11 compaction reminder" line), reject reverts via `git checkout HEAD --`, `cancel` leaves the working tree as-is per Step 10's `Mid-loop cancel` semantic, and `adjust` follows Step 11's own three-case closed list (per-file disposition / clarification / other) rather than Step 10's Mid-loop adjust branches.
+- feat(dev-workflow): add Step 11 compaction approval gate to the `§ No-Stall Principle` explicit-user-gates closed list. `references/plan-format.md` § User-gate summary preamble's `Applies to:` list extended to include this gate with its own Required / Optional content slots (file count with `applied_edits_count > 0`, total chars saved, `per_file_status` breakdown, over-threshold count; structural_notes count and self-application warning are Optional).
+
 ### dev-workflow v1.37.0 / dev-workflow-bundle v1.37.0
 
 - feat(dev-workflow): add `ask-agy` to the supported reviewer closed list.
