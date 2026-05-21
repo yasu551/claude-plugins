@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-05-21
+
+### ask-peer v2.2.8 / dev-workflow-bundle v1.39.2
+
+- fix(ask-peer): extend state-variable lifecycle audit to persistence-layer state and add mitigation-vs-root-cause discrimination (auto-triage #36)
+  - Category: missing-branch; Planning bullet's (iii) state-variable lifecycle clause covered counter / flag / accumulator but did not name persistence-layer state records whose add / start write must be symmetrically matched by completion / failure / empty-state-arrival writes — reviewers thus surfaced symptom-mitigation fixes (discard stale entries on read) without flagging the underlying save-on-completion asymmetry. (iii) extended to include "persistent state record" + persistence-layer write asymmetry example, and new (iv) clause added requiring reviewers to flag mitigation-only fixes as partial and demand identifying the state-machine asymmetry that produced the symptom.
+
+### dev-workflow v1.39.2 / dev-workflow-bundle v1.39.2
+
+- fix(dev-workflow): add Sub-skill natural-language argument minimalism bullet to Step 2 Simplicity self-audit (auto-triage #37)
+  - Category: ambiguity; Step 2 § Simplicity self-audit had no bullet warning that long contextualized natural-language preambles passed to a sub-skill can override the callee's procedural fallbacks and cause empty-input early-termination — a non-obvious property the existing guidance did not name. New bullet establishes short scope-only sentence as the default, names the three sub-rules (minimum scope only / extra context only when strictly required / state preparation as the fallback), and explains the prompt-injection-weight mechanism.
+- fix(dev-workflow): extend § Progress Visibility with Mid-chain visibility rule for chained sub-skill dispatches (auto-triage #37)
+  - Category: missing-branch; § Progress Visibility covered only single pre-dispatch status messages, leaving the user-visibility window during chained sub-skill phases (feasibility checks, routine dispatch loops, multi-call interpretation) unhandled — the gap between dispatches could span multiple silent turns. New Mid-chain visibility clause requires a one-line current-location report at semantic checkpoints between dispatches, bound by three stall-preventing constraints (same-turn prose / phase-name+next-action only / not applied to short same-turn chains).
+- fix(dev-workflow): add Negative-direction rule to plan-format.md § Localization granularity (auto-triage #37)
+  - Category: ambiguity; § Localization granularity stated only positive-direction rules (Two-way rule + First-use pairing) without explicitly bounding what happens outside those categories, so defensive over-preservation could sprinkle source-language vocabulary across connective prose. New Negative-direction subsection establishes connective prose stays in the resolved language only, with three sub-rules: (a) verbatim scope is closed (machine-readable tokens / code / paths / commands / headings), (b) first-use pairing gated on translation-gap need, (c) function-word connectives stay in the resolved language only.
+- fix(dev-workflow): add Symptom-mitigation vs root-cause-fix discrimination bullet to Step 2 Simplicity self-audit (auto-triage #36)
+  - Category: ambiguity; Step 2 § Simplicity self-audit had no audit item for bug-fix tasks to discriminate symptom-mitigation changes (suppress the firing condition of the observed failure) from root-cause-fix changes (correct the state-machine asymmetry that produces it), so all-mitigation plans could pass author review and surface as "but why does the symptom happen?" pushback only at Step 3 reviewer iteration or Step 4 user-gate. New bullet defines the two classes with concrete examples, mandates explicit Decisions surfacing when the plan is all-mitigation (Recommendation vs Alternative + rationale), and requires the structural cause to appear in Risks even when not fixed in this scope.
+
 ## 2026-05-20
 
 ### dev-workflow v1.39.1 / dev-workflow-bundle v1.39.1
