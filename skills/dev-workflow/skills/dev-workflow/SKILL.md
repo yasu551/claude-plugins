@@ -287,7 +287,7 @@ Mark `Step 3: Plan Review` as `completed`.
 
 Implementation often introduces unnecessary complexity that's easier to spot in a dedicated pass after the code works.
 
-1. `Skill(tidy)`: Review changed code for reuse, quality, and efficiency, then apply cleanup edits. Pass the workflow's `custom_instructions` config value through tidy's natural-language `Custom instructions` field.
+1. `Skill(tidy)`: Review changed code for reuse, quality, and efficiency, then apply cleanup edits. Pass the workflow's `custom_instructions` config value through tidy's natural-language `Custom instructions` field (omit the field entirely when `custom_instructions` is unset or empty — do not render `(none)` / empty string / fabricated default). General principle: when a caller-skill dispatch field is driven by an optional config key, state the absent-key behavior inline on the dispatch line rather than relying on cross-reference to the config-parse step.
 2. Regardless of the outcome — whether `tidy` applied fixes, reported no actionable findings, or returned any other non-error result — mark `Step 6: Tidy` as `completed` and proceed to Step 7 automatically. Per the No-Stall Principle, do not wait for user input.
 3. **If `Skill(tidy)` result is not observable** (e.g. context compaction occurred during or immediately after the call): inspect `git diff <base-commit>`. If the diff contains changes clearly attributable to a cleanup pass, treat tidy as completed and proceed to Step 7. Otherwise (no tidy-attributed changes visible, or ambiguous), re-execute `Skill(tidy)` once — inspection-and-fix-class skills are idempotent — then proceed to Step 7.
 
