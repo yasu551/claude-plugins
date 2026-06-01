@@ -479,7 +479,7 @@ The workflow begins at Step 2 (Step 1 is settings load, Step 1.5 is task decompo
 | 3 | Plan Review | Internal review by reviewer (up to N iterations; skipped entirely for Trivial tasks, N=0) |
 | 4 | Finalize Plan | **User approval gate** |
 | 5 | Implement | Follow the plan |
-| 6 | Tidy | Reduce complexity via `tidy` skill |
+| 6 | Tidy | Reduce complexity via the built-in `simplify` skill (falls back to the in-house `tidy` skill when `simplify` is unavailable) |
 | 7 | Check / Test | Run check_commands + run-tests |
 | 7.5 | Rules Compliance Review | Verify `.claude/rules/` compliance via `rules-review` skill |
 | 8 | Code Review | Code review by reviewer (up to N iterations; skipped entirely for Trivial tasks, N=0) |

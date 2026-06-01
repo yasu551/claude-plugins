@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-01
+
+### dev-workflow v1.46.0 / dev-workflow-bundle v1.46.0
+
+- feat(dev-workflow): **Step 6 (Tidy) now prefers the built-in `simplify` skill** — Step 6 invokes `Skill(simplify)` first and falls back to the bundled in-house `Skill(tidy)` (after a one-line fallback note) only on Claude Code versions that lack the built-in `simplify`. The Step 6 phase name "Tidy" and related labels (Tidy-revival check, etc.) are intentionally kept — only the invoked callee and the callee-enumeration cross-references (frontmatter `allowed-tools`, § No-Stall Principle, § Progress Visibility, § Step 11.5 Agent-usage, § Step 7.5) gain the `simplify` / `tidy` pairing. **Behavior change**: on Claude Code with built-in `simplify`, the Step 6 cleanup pass is now performed by `simplify` rather than `tidy`. Note: `simplify` is a built-in with no on-disk SKILL.md, so its argument interface is unverified — the `simplify` path passes no scope argument and only an optional best-effort `custom_instructions` hint; should a future upstream re-scope `simplify`, Step 6 behavior could shift silently (revisit on the next Claude Code update).
+
 ## 2026-05-27
 
 ### dev-workflow v1.45.0 / dev-workflow-bundle v1.45.0
