@@ -447,9 +447,9 @@ On entry to Step 10, initialize `landed_count = 0` before running Procedure 1 �
      Prose-only summaries such as "body 含め、diff full preview" / "subject and body included" without actually rendering the corresponding blocks are forbidden — they leave the user without the material content needed to judge approve / adjust / cancel and trigger an immediate re-render request
    - **b. Per-commit accept gate**: wait for the user. Categorize the response per § Approval token closed list
    - **c. Stage**: run `git add -- "<file-1>" "<file-2>" ...` in a single invocation with one explicit pathspec per file (verbatim filenames recovered from Procedure 1's `-z` output — never the C-quoted form). The `--` separator + double-quoting handle spaces, quotes, and non-ASCII characters; `-A` and other bulk forms are forbidden because they may stage unrelated drift
-   - **d. Commit**: prefer a HEREDOC even for one-line subjects so multi-line bodies share the same form. `git commit -m "<subject>"` for subject-only; for subject + body use:
+   - **d. Commit**: prefer a HEREDOC even for one-line subjects so multi-line bodies share the same form. Always include the same pathspec that `c. Stage` used — this prevents any auto-staging hook that fires between Stage and Commit from expanding the commit's scope. `git commit -m "<subject>" -- "<path-1>" "<path-2>" ...` for subject-only; for subject + body use:
      ```bash
-     git commit -F - <<'EOF'
+     git commit -F - -- "<path-1>" "<path-2>" ... <<'EOF'
      <subject>
 
      <body>
