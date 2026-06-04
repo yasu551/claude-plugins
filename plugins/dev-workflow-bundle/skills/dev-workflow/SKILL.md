@@ -498,7 +498,7 @@ If the current plan explicitly deferred bookkeeping edits to the commit stage �
 
 ### Step 11: Update Rules
 
-1. `Skill(extract-rules)` with `--from-conversation` (always)
+1. `Skill(extract-rules)` with `--from-conversation` — **Skip if already run this session**: if any entry in `hooks.on_complete` (as resolved in Step 1) contains the string `extract-rules`, skip this sub-step — Step 9 (Completion Hooks) already ran it. Running `--from-conversation` twice against the same session causes the staged-promotion mechanism (first-observation → second-observation escalation) to miscount one session as two independent observations, prematurely promoting staging candidates to confirmed rules.
 2. `Skill(extract-rules)` with `--update` (trigger on either: significant structural/pattern changes to application code occurred — new frameworks, libraries, architectural patterns, or API conventions introduced in the diff; prose-only changes to SKILL.md, agent definitions, references, or rule files do not qualify, OR a dependency had a recent major-version bump — i.e. the semver major digit increased in the manifest, not a minor / patch — detected via `git diff <base-commit>` of the package manifest. The same signal used in the Step 2 difficulty assessment. The major-bump trigger opens the extract-rules Update Mode operational note, which prompts manual review of `.examples.md` samples that may have gone stale after the bump)
 3. **Char-count compaction gate**:
 
