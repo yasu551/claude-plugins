@@ -1,12 +1,12 @@
 ---
 name: triage-review
 description: Daily review of the latest origin triage-* branch. Operator-prepared invariant — the operator fetches origin and switches the local repository to the triage branch before invocation. The skill verifies that the current branch matches `triage-*`, then dispatches `Skill(prompt-tuning)` per prompt-eligible changed file, `Skill(skill-review)` with `Base ref: main`, and `Skill(publicity-review)` with `Base ref: main` in sequence, finally emits a summary. Project-local routine — not for marketplace distribution.
-allowed-tools: TaskCreate, TaskUpdate, TodoWrite, Skill(prompt-tuning), Skill(skill-review), Skill(publicity-review), Bash(git rev-parse *), Bash(git symbolic-ref *), Bash(git status --porcelain*), Bash(git diff *)
+allowed-tools: TaskCreate, TaskUpdate, TodoWrite, Skill(prompt-tuning), Skill(skill-review), Skill(publicity-review), Bash(git rev-parse *), Bash(git symbolic-ref *), Bash(git status --porcelain*), Bash(git diff *), Bash(git stash *)
 ---
 
 # Triage Review
 
-Daily local review of the latest `dev-workflow-triage` output branch. After `dev-workflow-triage` (running on Claude Code on the Web) pushes a `triage-YYYYMMDD-HHMMSS` branch to origin, the operator manually fetches origin and switches the local repository to that branch (e.g. `git fetch origin --prune && git switch triage-YYYYMMDD-HHMMSS`) before invoking this skill. The skill then dispatches three review skills against `main..HEAD` — `Skill(prompt-tuning)` per prompt-eligible changed file, `Skill(skill-review)`, and `Skill(publicity-review)`. Non-destructive (no `git reset` / staging mutation, no network operation, no branch switching) — keeps HEAD at the triage tip and passes review framing to each callee.
+Daily local review of the latest `dev-workflow-triage` output branch. After `dev-workflow-triage` (running on Claude Code on the Web) pushes a `triage-YYYYMMDD-HHMMSS` branch to origin, the operator manually fetches origin and switches the local repository to that branch (e.g. `git fetch origin --prune && git switch triage-YYYYMMDD-HHMMSS`) before invoking this skill. The skill then dispatches three review skills against `main..HEAD` — `Skill(prompt-tuning)` per prompt-eligible changed file, `Skill(skill-review)`, and `Skill(publicity-review)`. Non-destructive aside from a transient auto-stash that is restored before the skill exits — or, if the pop conflicts, preserved in `git stash list` and reported (no `git reset`, no network operation, no branch switching) — keeps HEAD at the triage tip and passes review framing to each callee. When the working tree has uncommitted tracked changes, the skill stashes them for the duration of the review and restores them just before emitting the summary (see § Auto-stash restore), so the callees' diff scope stays at `main..HEAD`.
 
 ## No-Stall Principle
 
@@ -16,7 +16,7 @@ The generic regimen (sub-skill return discipline, Step-boundary non-stalling, ph
 
 **Permissible fatal-abort exits** (emit the Step 6 summary in `pre-flight aborted` form and stop):
 
-- Step 1 Pre-flight failures: `detached HEAD`, `current branch is not a triage-* branch`, `uncommitted tracked-file changes` (untracked files are intentionally ignored — see § Step 1 check 3 rationale)
+- Step 1 Pre-flight failures: `detached HEAD`, `current branch is not a triage-* branch`, `failed to stash uncommitted changes` (uncommitted tracked changes are auto-stashed rather than aborted — see § Step 1 check 3; the abort fires only when the stash itself fails. Untracked files are intentionally ignored)
 
 0-result paths (no changes between main and HEAD) are **not** aborts — they emit a dedicated summary form (form 2) and exit cleanly.
 
@@ -53,18 +53,47 @@ Japanese (`ja`) only. The 3-rule localization regimen (Translate generic concept
 
 **This skill's verbatim-preserve token set** (additions beyond the canonical list):
 
-- Enum values: `converged`, `max-iter`, `skipped`, `unparsed`, `error`, `no-actionable-findings`, `applied-edits`, `notes-left`, `framing-failed`, `ok`
-- Field labels: `status:`, `iterations_used:`, `applied:`, `notes_remaining:`, `findings:`, `remaining:`, `framing:`
+- Enum values: `converged`, `max-iter`, `skipped`, `unparsed`, `error`, `no-actionable-findings`, `applied-edits`, `notes-left`, `framing-failed`, `ok`, `restored`, `not needed (clean tree)`, `restore failed`
+- Field labels: `status:`, `iterations_used:`, `applied:`, `notes_remaining:`, `findings:`, `remaining:`, `framing:`, `auto-stash:`
 
 ## Step 1 — Pre-flight
 
 Run the environment checks below in order; fatal abort on the first failure. The operator is responsible for `git fetch origin` and `git switch <triage-branch>` before invocation — this skill performs no network operation and no branch switching.
 
+Initialize `auto_stashed = false` and `orphan_stash_detected = false` at Step 1 entry (before check 1). The first makes the restore guard in § Auto-stash restore well-defined on every exit path, including form-1 aborts from checks 1–2 that run before the stash; the second is set by check 3's orphan scan and read by the Step 6 summary.
+
 **Pre-flight environment checks**:
 
 1. `git symbolic-ref -q HEAD >/dev/null` — non-zero exit means detached HEAD → abort with reason `detached HEAD: switch to the triage-* branch before invocation`
 2. `triage_branch_short = git rev-parse --abbrev-ref HEAD` — capture the current branch name. Verify it matches the `triage-*` glob (shell: `case "$triage_branch_short" in triage-*) ;; *) abort ;; esac`). If it does not → abort with reason `current branch is not a triage-* branch: <triage_branch_short> — fetch origin and switch to the latest triage-* branch before invocation`
-3. `git status --porcelain --untracked-files=no` — non-empty output indicates uncommitted modifications to tracked files → abort with reason `working tree has uncommitted tracked-file changes: <line count> entries — stash or commit before running`. `--untracked-files=no` deliberately excludes untracked files so leftover staging artifacts (e.g. `.claude/plans/*.md` from prior sessions, files matching gitignore patterns that were never staged) do not block invocation — the review walks `main..HEAD` only, so untracked-file presence does not affect the diff inputs to the callees
+3. `git status --porcelain --untracked-files=no` — non-empty output indicates uncommitted modifications to tracked files. **Do not abort**: auto-stash them so the working tree matches HEAD for the duration of the review. (Rationale: the callees `skill-review` (`Base ref: main`) and `publicity-review` scope their diff with `git diff <Base ref>` = base-vs-**working-tree**, so uncommitted tracked changes would otherwise leak into their review scope beyond the intended `main..HEAD` stack. Stashing reduces this dirty-tree case to the already-supported clean-tree case, where `git diff main` == `git diff main HEAD` == `main..HEAD`.)
+
+   First, read `git stash list` once — its output feeds both the orphan scan and, if the tree is dirty, the stash-depth baseline.
+
+   **Orphan scan (runs regardless of whether the tree is dirty)**: if any existing entry's message contains `triage-review auto-stash`, it is an orphan from a prior run that terminated abnormally between stashing and restoring (see § Auto-stash restore's "Crash window" paragraph). Set `orphan_stash_detected = true` and surface it as a Step 6 warning line; do **not** auto-recover it — the operator resolves it manually. This is the re-run safety net for the only silent-data-loss window the auto-stash introduces.
+
+   Then branch on the `git status` output:
+   - **Non-empty (dirty tree)** — stash procedure:
+     - `stash_depth_before` = the line count of the `git stash list` output just read (count the lines directly — do not pipe to `wc`, which is not granted)
+     - Run `git stash push -m "triage-review auto-stash <triage_branch_short>"`. If it exits non-zero, retry once after a 1–2 second sleep
+     - Verify a stash entry was created: run `git stash list` again and confirm the line count is exactly `stash_depth_before + 1`. If the push still exited non-zero after the retry **or** the depth did not increase by exactly 1, the stash did not take → fatal abort with reason `failed to stash uncommitted changes: <reason>` (`<reason>` = the last non-empty stderr line truncated to ≤ 80 chars, or `(no stderr)`). Leave the working tree untouched; `auto_stashed` stays `false`. (Depth-delta, not a non-empty check: a prior unrelated stash may already exist, so "stash list is non-empty" cannot confirm this push took. Assumes single-operator local execution.)
+     - On success, set `auto_stashed = true` and hold it as run-level state in main-thread context. (The push goes on top of the stack, so a later `git stash pop` restores this run's stash, not any deeper orphan.)
+   - **Empty (clean tree)** — `auto_stashed` stays `false` (the pre-existing clean-tree path).
+
+   `--untracked-files=no` deliberately excludes untracked files: only tracked changes are stashed, and untracked files are never stashed and never block invocation (leftover staging artifacts such as `.claude/plans/*.md` from prior sessions, or files matching gitignore patterns that were never staged) — they do not appear in `git diff <Base ref>`, so their presence never affects the callees' diff inputs.
+
+## Auto-stash restore
+
+Run-level operation that restores any changes auto-stashed by § Step 1 check 3. **Invariant: every exit path after a successful auto-stash must pass through this operation before the summary is emitted.** Today there are exactly two such exit paths — Step 2 form 2 (empty `changed_files`) and Step 6 form 3 (normal completion). If a future change adds any fatal-abort path between check 3 and Step 6, it must wire this restore too.
+
+- If `auto_stashed == false`: no-op (clean-tree path, or a form-1 abort from checks 1–2 that ran before the stash).
+- If `auto_stashed == true`: run `git stash pop`. On zero exit, record `auto-stash: restored`. On non-zero exit (e.g. a merge conflict), retry once after a 1–2 second sleep. If it still fails, **do not auto-recover** (no `git reset`, no `git checkout`, no force) — record a restore-failed warning per § Step 6 and leave the conflict for the operator. The stashed changes remain safe in `git stash list` (look for the `triage-review auto-stash` message in the entry list).
+
+Run this **immediately before** the summary is rendered so its outcome can be included as a summary line.
+
+**Crash window**: if the run terminates abnormally (a fatal tool-level error, session death) between the successful stash in § Step 1 check 3 and this restore, the stash is left in `git stash list` with the `triage-review auto-stash` message while the working tree looks clean — the only silent-data-loss window the auto-stash introduces. It is not lost: the next run's § Step 1 check 3 orphan scan detects the leftover entry and surfaces it as a Step 6 warning. Recover it manually (`git stash pop`, or `git stash apply` if you want to keep the entry) once the tree is in a known state.
+
+**Callee scope rails do not collide with the stash.** `skill-review` and `publicity-review` each carry a `git checkout HEAD -- <path>` scope rail. Because the pop runs only after every callee has finished (just before the summary), the working tree equals HEAD throughout callee execution and the rails operate on already-clean files — there is no window in which a rail and live stashed content coexist. No defensive coupling between the rails and the stash is needed.
 
 ## Step 2 — Capture changed files
 
@@ -74,7 +103,7 @@ git diff --name-only main HEAD
 
 Hold the output as `changed_files` in main-thread context.
 
-- Empty `changed_files` → emit § Step 6 summary form 2 (`no changes between main and HEAD on <triage_branch_short>`) and exit. Subsequent steps are skipped
+- Empty `changed_files` → run § Auto-stash restore (it is a no-op when `auto_stashed == false`), then emit § Step 6 summary form 2 (`no changes between main and HEAD on <triage_branch_short>`) and exit. Subsequent steps are skipped. (No callee ran on this path, so the pop is a clean restore — see the form-2 note in § Form 3 content for why it cannot conflict.)
 - Non-empty → filter to prompt-eligible files. **Filter rules** (basename / path-segment equality, not substring match):
   - basename equals `SKILL.md`, OR
   - basename equals `CLAUDE.md`, OR
@@ -147,9 +176,14 @@ Base ref: main
 
 ## Step 6 — Emit summary
 
+**Run § Auto-stash restore before rendering any summary form** (it is a no-op when `auto_stashed == false`), so the restore outcome can be surfaced as a summary line. Then append the `auto-stash:` field / warning line(s) defined in § Form 3 content:
+
+- the **restore-outcome field** (`auto_stashed == true`) and the conflict-variant restore-failed warning attach to **form 2 or form 3** — the restore runs only on those successful-stash exit paths. These field/warning specs are shared by form 2 and form 3 (form 2 renders them identically), with the single exception of the conflict-variant restore-failed wording, which is form-3-only as noted there.
+- the **orphan warning** (`orphan_stash_detected == true`) attaches to **whatever form is emitted, including form 1** — a check-3 stash-push failure routes to form 1 yet may have already detected an orphan in the same run, so form 1 must still carry the orphan warning. (Form-1 aborts from checks 1–2 run before the orphan scan, so `orphan_stash_detected` is still `false` there and no orphan line is appended.)
+
 Output language is Japanese (per § Output language). Render the summary in **one of three closed forms**:
 
-1. `pre-flight aborted: <reason>` — emitted on any Step 1 fatal abort
+1. `pre-flight aborted: <reason>` — emitted on any Step 1 fatal abort (also carries the orphan warning when `orphan_stash_detected` is true — see the Step 6 intro above)
 2. `no changes between main and HEAD on <triage_branch_short>` — emitted from Step 2 when `git diff --name-only main HEAD` is empty
 3. `normal completion` — emitted when Step 3 / 4 / 5 ran
 
@@ -167,6 +201,7 @@ When form 3 fires, render in Japanese:
 - prompt-tuning ファイル別判定（per file）: 各ファイルの分類（`converged` / `max-iter` / `skipped` / `skipped (agent unavailable)` / `error` / `unparsed`）
 - skill-review: `<status> (iterations: <K>, applied: <A>, notes_remaining: <R>, framing: <framing_status>)`。`framing_status` ∈ {`ok`, `framing-failed (suspected — iter=0 on non-empty main..HEAD)`}
 - publicity-review: `<status> (iterations: <K>, applied: <A>, findings: <F>, remaining: <R>)`
+- auto-stash（auto-stash）: `restored` / `not needed (clean tree)` / `restore failed` — `auto_stashed` が true で pop 成功なら `restored`、`auto_stashed` が false なら `not needed (clean tree)`、pop 失敗なら `restore failed`（詳細は下の warning 行）
 
 Warning lines (one per non-fatal incident) follow the main fields:
 
@@ -175,6 +210,8 @@ Warning lines (one per non-fatal incident) follow the main fields:
 - `skill-review: framing-failed (suspected — iter=0 on non-empty main..HEAD)` — single line
 - `skill-review: error (<reason>)` — single line
 - `publicity-review: error (<reason>)` — single line
+- `auto-stash restore failed: <reason> — changes preserved in \`git stash list\`; resolve the conflict before the handoff \`git switch main\` step` — single line, **form 3 only** (a pop conflict can occur here because callees may have edited files in `main..HEAD`). On the form 2 path the working tree is still == HEAD so the pop cannot conflict; if it nonetheless fails for some other reason, emit the generic variant `auto-stash restore failed: <reason> — changes preserved in \`git stash list\`` (form 2 has no `git switch main` handoff note, so the conflict-resolution clause is omitted)
+- `auto-stash: orphaned entry from a prior run detected in \`git stash list\` — recover it manually` — single line, emitted under **form 1, form 2, or form 3** whenever `orphan_stash_detected` is true (set by § Step 1 check 3's orphan scan). Independent of which form fires and of this run's own stash outcome
 
 ### Branch handoff note (always shown after the main content when form 3 fires)
 
