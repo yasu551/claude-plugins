@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-06-03
+
+### dev-workflow v1.48.2 / dev-workflow-bundle v1.48.2
+
+- fix(dev-workflow): add generated-artifact regeneration check for major upgrades (auto-triage #61)
+  - Category: missing-branch; Step 3 Focus area (a) had no check for generated artifacts (lock files, config snapshots, derived fixed files) whose non-regeneration rationale rests solely on format compatibility — new major versions may embed additional metadata into those artifacts even when the format-version integer is unchanged, making format compatibility and regeneration necessity orthogonal concerns. New bullet directs plan reviewers to verify both axes independently and to require an empirical validation step when the non-regeneration rationale rests solely on format compatibility.
+
+### ask-peer v2.2.10 / dev-workflow-bundle v1.48.2
+
+- fix(ask-peer): add verification-safety principle to peer agent personality (auto-triage #61)
+  - Category: missing-branch; Core Principles had no guidance for when a peer reviewer suggests or performs verification steps requiring state changes (VCS checkouts, package installs, build artifacts) — uncommitted working-tree changes could be silently destroyed mid-verification. New Verification safety bullet directs the peer to prefer non-destructive read-only verification by default, and when state-mutating steps are unavoidable to snapshot affected state (e.g. `git stash -u` for VCS working trees), perform the verification, then restore.
+
 ## 2026-06-02
 
 ### dev-workflow v1.48.1 / dev-workflow-bundle v1.48.1
