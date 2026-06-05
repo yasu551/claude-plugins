@@ -496,7 +496,7 @@ Plans produced in Step 2 and presented in Step 4 follow a fixed structure so you
 
 | Section | Required | Purpose |
 | --- | --- | --- |
-| Overview | Yes | Goal, difficulty, scope (files), approach — at most 5 bullets, one line each. 30-second scan |
+| Overview | Yes | Goal, highlights (high-impact callouts — DB migrations, destructive ops, breaking changes; omitted when none), difficulty, scope (files), approach — at most 5 bullets, one line each. 30-second scan |
 | Decisions | Yes | Up to 5 items where **your** judgment is actually needed, OR a fixed "no decisions" sentence (see below) |
 | Design | Yes | Detailed design body, structured by file or by step |
 | Test plan | Yes | Test files to add/update, test types, coverage — or justification for no tests |
@@ -510,12 +510,14 @@ When no items qualify, the section is still rendered with one of two fixed sente
 
 In Resume mode, subtask boundaries, order, and purposes were already approved in the parent run's Step 1.5 — only in-subtask judgment calls surface in Decisions. Details in [`references/plan-format.md`](references/plan-format.md) § Subtask / Resume handling.
 
+**Two-tier presentation**: in chat, Step 4 shows a condensed view — Overview (including highlights), Decisions, and the files Design will touch. The full plan (Design body, Test plan, Risks) lives in the approval modal, which renders the complete plan file. A `Review guide` line at the top marks which sections need your judgment (Highlights, Decisions) vs reference detail (Design, Test plan, Risks).
+
 ### How to review a plan quickly
 
-1. Read Overview (≤ 30 seconds).
+1. Read the `Review guide` line and Overview — including any Highlights (≤ 30 seconds).
 2. Read the guidance line at the top of the plan — Step 4 leads with one of three literal lines that tell you where to focus.
 3. If Decisions has items, engage with each one (the real work). If Decisions is empty, approve after a light skim.
-4. The rest of the plan has already been reviewed in Step 3 by the reviewer skill — skim only if something looks off. (Exception: for a Trivial task, N=0, Step 3 is skipped and the plan is unreviewed — read it carefully before approving.)
+4. The rest of the plan — Design, Test plan, Risks — is in the approval modal and has already been reviewed in Step 3 by the reviewer skill; open the modal and skim only if something looks off. (Exception: for a Trivial task, N=0, Step 3 is skipped and the plan is unreviewed — read it carefully before approving.)
 
 ## Prerequisites
 

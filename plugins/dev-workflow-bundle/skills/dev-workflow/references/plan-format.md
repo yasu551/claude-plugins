@@ -16,8 +16,11 @@ Every plan produced in Step 2 must follow this structure. Overview, Decisions, D
 ```markdown
 ## Plan
 
+> Review guide: must-review — Highlights, Decisions | reference — Design, Test plan, Risks
+
 ### Overview
 - **Goal**: 1 sentence — what the user gets
+- **Highlights**: high-impact items the reader must see first — DB / data migrations, destructive or irreversible operations, breaking API / contract changes, new runtime or dependency additions, security-sensitive changes (illustrative, non-exhaustive — use judgment, not a closed enum). One line. **Omit this bullet entirely when none apply.**
 - **Difficulty**: Trivial | Simple | Moderate | Complex (must match the Step 2 difficulty assessment)
 - **Scope**: N files — primary files to touch
 - **Approach**: 1–2 sentences — the chosen strategy
@@ -40,11 +43,28 @@ Each item:
 <Non-trivial risks or open questions. Omit the section entirely if none.>
 ```
 
+### Review guide line
+
+The `> Review guide: ...` line sits directly under `## Plan`, above Overview, so a reviewer can tell at a glance which sections demand judgment and which are reference detail:
+
+- **Must-review** = the sections that need the user's judgment: `Highlights` (high-impact callouts) and `Decisions`. When Highlights is omitted (no high-impact items), name `Decisions` alone.
+- **Reference** = supporting detail the user can skim: `Design`, `Test plan`, `Risks` (omit any that are absent).
+- Localization (§ Localization granularity): the connective words (`Review guide`, `must-review`, `reference`) are translated to the resolved `language`; the section-name tokens (`Highlights` / `Decisions` / `Design` / `Test plan` / `Risks`) stay verbatim — they are file-internal identifiers, and translating them would break the Step 2 self-check / Step 3 (f) heading exact-match.
+
+Paired bilingual sample (runtime rendering demonstration, not meta-prose):
+
+- `language: en`: `> Review guide: must-review — Highlights, Decisions | reference — Design, Test plan, Risks`
+- `language: ja`: `> レビュー指針（Review guide）: 要確認 — Highlights, Decisions | 参考 — Design, Test plan, Risks`
+
 ### Sizing guidance
 
-- Overview: at most 5 bullets, each at most one line. Overlong Overviews defeat the "30-second scan" goal.
+A plan is the user's review surface, not a document — its purpose is fast, accurate review. Default to the **tersest form that still lets the reviewer judge**: cut only redundancy, duplication, and padding — **never** the information, rationale, or boundaries the reviewer needs to decide. Operational test for "is this padding?": if removing a passage does not change what the reviewer can verify or decide, it is padding (cut it); if it does, keep it. Prefer bullets over prose, but use prose where a bullet cannot carry the logic. The caps below are soft — clarity wins over character count.
+
+- Overview: at most 5 bullets (4 when Highlights is omitted), each at most one line. Overlong Overviews defeat the "30-second scan" goal.
+- Highlights: a **single** Overview bullet (it is one of the ≤5 Overview bullets above, not a separate list), holding at most 3 high-impact items on one line — only genuinely high-impact items. See § Template for the categories and the omit-when-none rule.
 - Decisions: up to 5 items. A single genuine (a)+(b) item is fine — surface it alone rather than padding.
-- Design / Test plan: no fixed cap, but avoid narrating what well-named files/functions already convey.
+- Design: structure by file or by step in bullet form; collapse a change to one line only when it is self-evident, and keep the detail the reviewer needs to judge. As a concrete instance of the padding test above, avoid narrating what well-named files/functions already convey, and do not restate Decisions or Overview content.
+- Test plan: bullet-list the test files and the case each covers, one line per case. Do not re-describe (duplicate) the implementation.
 
 ## Decisions criterion (AND condition)
 
@@ -178,7 +198,7 @@ Intent: a native speaker of the resolved `language` reads the output as natural 
 
 ## User-gate summary preamble
 
-Each user-judgment gate that presents structured content (a plan body, a remaining-violations list, an unresolved-findings list) emits a short summary preamble. For Step 7.5 and Step 8, it appears at the top of the user-facing output, above the structured content. For Step 4, it appears after the plan body per § Step 4 presentation order (the plan body is rendered first in natural reading order; the preamble follows the `---` separator). In all cases the preamble is above the guidance line. The preamble names the *shape* of the situation (count, categories, what the gate is asking); it does not paraphrase, summarize, or re-list the structured content.
+Each user-judgment gate that presents structured content (a plan body, a remaining-violations list, an unresolved-findings list) emits a short summary preamble. For Step 7.5 and Step 8, it appears at the top of the user-facing output, above the structured content. For Step 4, it appears after the plan body per § Step 4 presentation order (the plan body — condensed in chat per § Step 4 presentation order's two-tier split — is rendered first in natural reading order; the preamble follows the `---` separator). In all cases the preamble is above the guidance line. The preamble names the *shape* of the situation (count, categories, what the gate is asking); it does not paraphrase, summarize, or re-list the structured content.
 
 **Applies to:**
 
@@ -229,15 +249,25 @@ When the structured content has only one item (a single remaining violation in S
 
 ## Step 4 presentation order
 
-Step 4 presents the full plan body in natural reading order (Overview → Decisions → Design → Test plan → Risks/Unknowns), followed by an approval summary at the bottom where the chat viewport naturally lands. Step 7.5 and Step 8 do **not** use this protocol — they present preamble + content directly.
+Step 4 uses a **two-tier presentation** so the user's review surface stays scannable while full detail remains one click away. Step 7.5 and Step 8 do **not** use this protocol — they present preamble + content directly.
 
-**Output sequence (Step 4 only):**
+- **Plan file** (the Plan Mode plan file — the file you write with the `Write` tool before calling `ExitPlanMode`; the approval modal renders its contents) = the **full** plan body: the `> Review guide` line + Overview → Decisions → Design → Test plan → Risks/Unknowns, in template order. Always write the full plan to this file — the modal renders the file's contents, so the full plan is what the user sees on opening the approval modal.
+- **Chat presentation** = a **condensed** view (must-review subset + file-level orientation), so the chat does not repeat the full body the modal already carries.
+
+**Mechanism dependency**: the split relies on the current Claude Code behavior where `ExitPlanMode` reads the plan **file** and the approval modal shows that file's full contents — per the current `ExitPlanMode` tool contract, the plan is not passed as a tool argument, it is read from the file written during Plan Mode. Where the modal does not render the file, the condensed chat would under-inform — the always-write-the-full-plan rule above is the backstop, so nothing the condensed chat omits is unreachable.
+
+**Chat output sequence (Step 4 only):**
 
 1. `## Plan` header as a visual boundary separating the plan from prior conversation
-2. Full plan body in template order — `Overview`, `Decisions`, `Design`, `Test plan`, `Risks / Unknowns` (if present) — rendered in full, following § Localization granularity. Section headings render at `###` level (one below the `## Plan` container); sub-sections (Title, Goal, Scope, Decision N, Implementation, etc.) at `####`
-3. Horizontal rule (`---`) as a visual separator between the plan body and the approval summary
-4. Summary preamble per § User-gate summary preamble
-5. Guidance line per § Step 4 guidance lines
-6. **`ExitPlanMode` must be called in the same turn** — do not output additional text or wait for user input between the guidance line and the `ExitPlanMode` call. `ExitPlanMode` triggers the approval modal; delaying it to a subsequent turn causes the workflow to appear stalled with no visible approval mechanism
+2. The `> Review guide` line per § Review guide line
+3. Condensed plan body, following § Localization granularity — heading levels: `###` for sections (one below the `## Plan` container), `####` for sub-sections:
+   - `Overview` in full (including `Highlights` when present) — it is already short
+   - `Decisions` in full — these need the user's judgment
+   - `Design` as a **file-list only**: the files to change with one line of what-changes each — not the full Design body (that lives in the plan file / modal)
+   - `Test plan` and `Risks / Unknowns` are **not** rendered in chat — they live in the plan file / modal; their essentials surface via the preamble's `verification approach` and `known risks` slots
+4. Horizontal rule (`---`) as a visual separator between the condensed body and the approval summary
+5. Summary preamble per § User-gate summary preamble
+6. Guidance line per § Step 4 guidance lines
+7. **`ExitPlanMode` must be called in the same turn** — do not output additional text or wait for user input between the guidance line and the `ExitPlanMode` call. `ExitPlanMode` triggers the approval modal (which renders the full plan file); delaying it to a subsequent turn causes the workflow to appear stalled with no visible approval mechanism
 
 The user may approve, reject, or request refinement via the approval modal. If the user requests changes, the plan re-enters Plan Mode interaction without repeating the full presentation sequence.
