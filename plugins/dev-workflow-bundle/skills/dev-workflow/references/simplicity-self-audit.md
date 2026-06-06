@@ -1,6 +1,6 @@
 # Step 2 Simplicity self-audit
 
-Checklist for the `SKILL.md` Step 2 sub-step **Simplicity self-audit**. Before proceeding to Step 3, audit the plan against every item below. For each element that fails the audit, either (i) drop it from the plan, or (ii) add an explicit one-line rationale tying it to a concrete trigger (user requirement / bug / rule).
+Checklist for the `SKILL.md` Step 2 sub-step **Simplicity self-audit**. Before proceeding to Step 3, audit the plan against every item below. For each element that fails the audit, either (i) drop it from the plan, or (ii) add an explicit one-line rationale tying it to a concrete trigger (user requirement / bug / rule). Some checklist items below prescribe a **more specific remedy** (e.g. a binary Decisions Recommendation/Alternative item, or surfacing lighter alternatives); when such an item applies, its prescribed remedy supersedes this generic (i)/(ii) pair — the (i)/(ii) pair is the fallback only when the matched item names no more specific remedy.
 
 This file is the **single canonical home** for the audit checklist; `SKILL.md` Step 2 references it rather than restating the items, and Step 3 reviewer category (a) reads it for the same checklist. The stable phrase anchor `Step 2 § Simplicity self-audit` (used by Step 3 reviewer category (a), Step 5 late-stage scaffolding self-audit, `references/plan-format.md` § Step 2 self-check, and `references/task-decomposition.md`) resolves to the Step 2 sub-step that points here — keep that sub-step's `Simplicity self-audit` label intact when editing.
 
