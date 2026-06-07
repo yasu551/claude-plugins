@@ -106,11 +106,13 @@ Instruct the subagent to:
 - **Workflow stalls / loops** — a workflow step ran multiple times without progress, or the skill looped on a decision
 - **Rejected skill outputs** — the user explicitly rejected what a skill produced
 - **Ambiguity surfacing in reviews** — Step 3 / Step 8 peer reviews pointed at SKILL.md wording as the root cause of a mistake
+- **Token-consumption inefficiency** — a workflow step spent tokens wastefully (re-reading the same file across turns, re-deriving a value already present in context, dispatching a subagent for work the main thread already held, emitting long redundant prose) and the skill could have avoided it
+- **Development-speed friction** — a step took disproportionately long in wall-clock time or round-trips and the skill could shorten it **without lowering output quality** (a sequential dispatch that could run concurrently, a gate that fired when it did not need to, an avoidable re-run) — never by dropping review or verification coverage
 
 ### 2.3 Candidate schema (one per signal)
 
 - **target skill** — one of the four bundle skills
-- **category** — `ambiguity` / `missing-branch` / `wrong-default` / `rules-conflict` / `other`
+- **category** — `ambiguity` / `missing-branch` / `wrong-default` / `rules-conflict` / `other`. For efficiency-class findings (token-consumption / development-speed), take `wrong-default` when the inefficiency stems from a default-behavior choice, otherwise `other`
 - **description** — one-paragraph abstract description of what went wrong (sanitized per §3)
 - **suggested fix direction** — one-paragraph high-level direction, not a full patch (sanitized per §3)
 
