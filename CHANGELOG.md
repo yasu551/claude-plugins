@@ -2,6 +2,11 @@
 
 ## 2026-06-08
 
+### dev-workflow v1.54.0 / dev-workflow-bundle v1.55.0
+
+- feat(dev-workflow): wire timestamp/usage measurement into the Step 11.5 self-retrospective subagent
+  - Extends `references/self-retrospective.md` §2.1 step 2 to extract `timestamp` and `message.usage` from session jsonl entries (entries missing these fields are skipped for interval computation). Adds §2.1 step 2a interval computation: wall-clock intervals between consecutive assistant entries, user-gate idle exclusion (assistant→user gap), and cumulative `output_tokens` per phase. Minimum data requirement: fewer than 2 valid-timestamp assistant entries skips interval computation gracefully. Measured evidence (approximate seconds, token counts) is embedded in Finding `description` prose — the return schema is unchanged, so the downstream `dev-workflow-triage` consumer needs no coordinated change. Updates §2.2 signal definitions for Token-consumption inefficiency and Development-speed friction to reference measured data. Adds §3 sanitization rule: absolute timestamps → relative intervals only (session timing not leaked). The `Category` enum is deliberately **not** extended (prior Decision from v1.51.0).
+
 ### dev-workflow v1.53.0 / dev-workflow-bundle v1.54.0
 
 - feat(dev-workflow): optimize the plan format for review load and in-progress followability
