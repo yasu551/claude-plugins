@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-08
+
+### dev-workflow v1.53.0 / dev-workflow-bundle v1.54.0
+
+- feat(dev-workflow): optimize the plan format for review load and in-progress followability
+  - Redefined the must-review tier in `references/plan-format.md` § Review guide line from `Highlights + Decisions` to `Overview + Decisions` (Highlights is one Overview bullet, so Overview subsumes it). This fixes a pre-existing inconsistency with § Step 4 presentation order, which already renders Overview-in-full + Decisions-in-full, and gives empty-`Decisions` plans a substantive review anchor (Goal / Approach). Removed the now-stale "When Highlights is omitted, name Decisions alone" special-case; synced the localized ja/en samples, the Template block, the Sizing-guidance wording, and README's "Two-tier presentation" line.
+  - § Template now lets Design be an ordered, numbered list of implementation steps when the work is sequential (preferred-when-sequential; by-file otherwise), so the implementer can follow it top-to-bottom. SKILL.md Step 5 may register each Design step as an implementation sub-task (permissive `MAY`, consistent with Step 1's "additions, not replacements" rule); Step 2 gains a one-line pointer.
+  - Added a lightweight, one-directional traceability convention (new § Traceability, single source of truth): Test → Design step (recommended), Design → Decision (optional), and the must-review tier carries no back-references. Added a must-review low-load rule paragraph, three § Step 2 self-check items, and a § Step 3 (f) traceability-resolution clause.
+
 ## 2026-06-07
 
 ### extract-rules v1.20.0 / dev-workflow-bundle v1.53.0
