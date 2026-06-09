@@ -5,22 +5,27 @@ description: Consult with a peer engineer for plan review, code review, implemen
 
 # Peer Engineer Consultation
 
-Get a second opinion from a peer engineer (Claude subagent).
+Get a second opinion from a peer engineer using the current host's reviewer-dispatch mechanism, with an inline fallback when dispatch is unavailable.
 
 ## Process
 
-1. **Select mode, then dispatch immediately**: First classify your execution context. **If subagent dispatch is unavailable — the `Agent` tool is absent from your tool surface, or nested dispatch is blocked because this skill is itself running inside a subagent — skip dispatch and produce the feedback inline on the main thread** by adopting the Peer Agent Personality below; the deliverable is the feedback content, not the dispatch mechanism. **Otherwise, dispatch:** issue the `Agent` tool call in the same turn as any status prose — reading this SKILL.md is preparation, not dispatch; the `Agent` call is the dispatch. Do not produce a "consulting peer" / "waiting for results" status message without a concurrent `Agent` tool call in the same turn. If the request contains multiple independent review categories, spawn one subagent (Agent tool) per category **in parallel**. Otherwise, spawn a single subagent.
-2. Each subagent receives the peer personality below + the full consultation request including all caller instructions
+1. **Select mode, then dispatch immediately**: First classify your execution host and tool surface.
+   - **Claude Code path**: when the `Agent` tool is exposed and nested dispatch is not blocked, dispatch with `Agent`.
+   - **Codex path**: when Codex exposes a subagent / delegation mechanism in the current session, dispatch through that mechanism.
+   - **Fallback path**: if no host-provided reviewer dispatch is available — the `Agent` tool is absent from your tool surface, or the host indicates before dispatch that reviewer dispatch cannot recurse — skip dispatch and produce the feedback inline on the main thread by adopting the Peer Agent Personality below. Being invoked as a sub-skill (e.g. via `Skill()` on the main thread) does **not** by itself trigger this path: decide by whether `Agent` is exposed and callable, not by invocation lineage — if it is, take the Claude Code path. The deliverable is the feedback content, not the dispatch mechanism.
+   - **No status-only turn**: reading this SKILL.md is preparation, not dispatch. Do not produce a "consulting peer" / "waiting for results" status message without a concurrent dispatch tool call in the same turn.
+   - **Parallelism**: if the request contains multiple independent review categories and the host supports parallel reviewer dispatch, spawn one reviewer per category in parallel. Otherwise, spawn a single reviewer or run the categories inline sequentially under the fallback path.
+2. Each reviewer receives the peer personality below + the full consultation request including all caller instructions
 3. For parallel reviews, merge results in category order as unified feedback
 4. Present the peer's feedback to the user
 
 ## Error Handling
 
-If a subagent dispatch fails due to a transient error (HTTP 5xx, timeout, or empty response), wait 1–2 seconds, then retry once before treating the failure as definitive. For non-transient failure classes (HTTP 4xx, schema/validation errors, permission denials, etc.), fail immediately without retry — retry will not change the outcome. When the failure becomes definitive, surface the failure reason (e.g., "HTTP 503 after one retry") to the caller — do not silently skip the review pass. Do not autonomously reroute to a different skill; the caller decides whether to substitute an alternative reviewer or proceed with self-review.
+If reviewer dispatch fails due to a transient error (HTTP 5xx, timeout, or empty response), wait 1–2 seconds, then retry once before treating the failure as definitive. For non-transient failure classes (HTTP 4xx, schema/validation errors, permission denials, etc.), fail immediately without retry — retry will not change the outcome. When the failure becomes definitive, surface the failure reason (e.g., "HTTP 503 after one retry") to the caller — do not silently skip the review pass. Do not autonomously reroute to a different skill; the caller decides whether to substitute an alternative reviewer or proceed with self-review.
 
 ## Peer Agent Personality
 
-Use the following as the system instructions when spawning the subagent:
+Use the following as the system instructions when spawning a reviewer:
 
 > You are an experienced software engineer sitting next to your colleague.
 > You function as a discussion partner and reviewer when the main Claude is working on tasks.
@@ -38,7 +43,7 @@ Use the following as the system instructions when spawning the subagent:
 > - What problem are you trying to solve? (Issue)
 > - What does success look like? (Goal)
 > - Are there any constraints? (Time, technical limitations, etc.)
-> - When the consultation is single-shot — no interactive channel to round-trip on these questions (e.g. dispatched from a non-interactive routine, or you are a one-shot review subagent returning a single feedback artifact) — do **not** block on them. State your working assumptions for Issue / Goal / Constraints inline and proceed with the review, flagging any assumption whose answer would materially change the findings.
+> - When the consultation is single-shot — no interactive channel to round-trip on these questions (e.g. dispatched from a non-interactive routine, or you are a one-shot reviewer returning a single feedback artifact) — do **not** block on them. State your working assumptions for Issue / Goal / Constraints inline and proceed with the review, flagging any assumption whose answer would materially change the findings.
 >
 > **Review Focus Areas:**
 > - Planning: scope, dependencies, risks, simpler approaches

@@ -2,6 +2,21 @@
 
 ## 2026-06-08
 
+### peer v2.3.0 / dev-workflow-bundle v1.56.0
+
+- feat(ask-peer): make peer consultation host-aware for Claude Code and Codex
+  - Replaces the Claude-subagent-only framing with a host-aware dispatch contract: use Claude Code `Agent` when available, use Codex subagent / delegation surfaces when exposed, and retain the existing inline fallback when reviewer dispatch is unavailable or nested dispatch cannot recurse. The peer personality, review rubric, parallel category merge behavior, and failure-surfacing policy are unchanged.
+
+### rules-review v1.2.0 / dev-workflow-bundle v1.56.0
+
+- feat(rules-review): support host-aware reviewer dispatch while preserving output compatibility
+  - Generalizes the Review phase from Claude `Agent`-only dispatch to the current host's reviewer-dispatch mechanism, covering Claude Code `Agent`, Codex subagent / delegation surfaces, and the existing inline sequential fallback. The Markdown report format and exact `No rule violations found` compliant verdict remain unchanged for existing callers.
+
+### tidy v1.2.0 / dev-workflow-bundle v1.56.0
+
+- feat(tidy): make cleanup reviewer dispatch and progress tracking host-aware
+  - Reframes the iteration loop around a host-provided reviewer instead of a Claude-only subagent, while keeping main-thread `Edit` application and the fenced JSON return contract unchanged. The task-tracking prose now allows Claude Code Task tools, compatible Codex task tracking, `TodoWrite`, or in-memory iteration state when no progress tools are surfaced.
+
 ### dev-workflow v1.54.0 / dev-workflow-bundle v1.55.0
 
 - feat(dev-workflow): wire timestamp/usage measurement into the Step 11.5 self-retrospective subagent

@@ -57,13 +57,17 @@ If no rules matched any changed files, output `No applicable rules for changed f
 
 ### 5. Review
 
-Prefer parallel execution: launch one reviewer Agent per group in a single message containing multiple Agent tool calls.
+Prefer parallel execution: launch one reviewer per group through the current host's reviewer-dispatch mechanism.
 
-Detecting Agent availability: the `Agent` tool is considered **unavailable** when its schema is not exposed in the current session's tool list (neither as a top-level tool nor via `ToolSearch`). Do not attempt a speculative call to detect availability — inspect the tool list directly.
+Host-aware dispatch:
 
-Fallback when Agent is unavailable (e.g., this skill is itself running inside a sub-agent that cannot recurse): execute the same reviewer prompt **inline sequentially** for each group — Claude itself acts as the reviewer, reading the embedded rules/examples/diff and producing the reviewer report in a single message per group. Do not substitute `claude -p` or external CLIs; the inline path is the defined fallback. Collect results identically in both paths.
+- **Claude Code path**: when the `Agent` tool is exposed and nested dispatch is not blocked, launch one reviewer `Agent` per group.
+- **Codex path**: when Codex exposes a subagent / delegation mechanism in the current session, launch one reviewer per group through that mechanism.
+- **Fallback path**: when no host-provided reviewer dispatch is available — the `Agent` tool is absent from the tool surface, or the host indicates before dispatch that reviewer dispatch cannot recurse — execute the same reviewer prompt **inline sequentially** for each group. Being invoked as a sub-skill (e.g. via `Skill()` on the main thread) does **not** by itself trigger this path: decide by whether `Agent` is exposed and callable, not by invocation lineage — if it is, take the Claude Code path. The current agent acts as the reviewer, reading the embedded rules/examples/diff and producing the reviewer report in the same format.
 
-Each reviewer (Agent or inline) receives the following prompt:
+Detect availability by inspecting the current tool surface. Do not attempt speculative tool calls just to probe availability. Do not substitute `claude -p`, `codex`, or other external CLIs; the inline path is the defined fallback. Collect results identically in all paths.
+
+Each reviewer (dispatched or inline) receives the following prompt:
 
 ```
 You are a rules compliance reviewer. Check ONLY whether the code changes comply with the project rules below.
@@ -116,7 +120,7 @@ Before launching reviewers, **prepare the data to embed in each prompt** (do NOT
 - When multiple rule files are embedded in one reviewer prompt, separate them with a `### <.claude/rules/... path>` sub-heading inside the `## Rules to Check` section.
 
 For each reviewer:
-- Set `description` to the group category name (e.g., "Review rules: frameworks") when using the Agent tool
+- Set the reviewer description / task label to the group category name (e.g., "Review rules: frameworks") when the dispatch mechanism supports a label field
 - Embed the pre-captured diff output directly in the prompt text
 - Embed the rule file contents and examples in the prompt text
 
