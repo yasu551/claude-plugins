@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-06-10
+
+### extract-rules v1.20.1 / dev-workflow-bundle v1.56.1
+
+- fix(extract-rules): retarget the § Sub-skill caller directive's locator for dev-workflow's Pre-invocation reminder
+  - Category: ambiguity; the dev-workflow v1.54.1 extraction moved the `**Pre-invocation reminder**` paragraph from SKILL.md § Step 11 into `references/update-rules.md` § Char-count compaction gate, leaving the cross-skill locator pointing at the old direct location (still resolvable in 2 hops via the retained sub-step skeleton, but no longer literal). Updated the locator to name the reference file.
+
+### dev-workflow v1.54.1 / dev-workflow-bundle v1.56.1
+
+- refactor(dev-workflow): extract Step 10 / Step 11 procedure bodies into on-demand references (no behavior change)
+  - Moves the Step 10 (Interactive Commits) procedure body (Procedures 1–9 plus the deferred-bookkeeping pass) to the new `references/interactive-commits.md`, and the Step 11 sub-step 3 (Char-count compaction gate) procedure body to the new `references/update-rules.md`, both verbatim. SKILL.md keeps the runtime-referenced definitions inline: section headings, entry / skip conditions, the `landed_count` / `compaction_applied_count` / `below_threshold_failed_files` cross-step contracts, the § Approval token closed list, and the § Localized summary tokens. Resident SKILL.md size drops from 164,911 to 144,481 chars (−20,430); the two new reference files (23,766 chars total) load on demand only when Step 10 / Step 11 execute. Same extraction + stable-anchor pattern as v1.48.5 (handoff measure M3; the realized reduction is below the handoff's 24–26k estimate because Step 11 sub-steps 1 / 2 stay inline per the agreed criterion).
+
 ## 2026-06-08
 
 ### peer v2.3.0 / dev-workflow-bundle v1.56.0
