@@ -2,6 +2,11 @@
 
 ## 2026-06-10
 
+### dev-workflow v1.55.0 / dev-workflow-bundle v1.57.0
+
+- feat(dev-workflow): fire the Step 7 rules-review background launch per pass — **behavior change**: each Step 8 post-fix re-run (the full Step 7 → Step 7.5 re-entry) now launches a background `rules-review` dispatch that overlaps the re-run's test phase, where these re-runs previously always dispatched `Skill(rules-review)` sequentially
+  - Generalizes the "Concurrent rules-review launch (first pass only)" paragraph to "(per pass)" with a single pass definition (a Step 7 entry that a Step 7.5 sub-step 1 collect will follow), introduces the explicit flag pair `rules_review_launched` / `rules_review_stale` with a documented init / set / read lifecycle mirroring the sibling code-review launch's discipline, and rewrites the Step 7.5 sub-step 1 collect condition from pass-number-based prose to the state-based `rules_review_launched == true && rules_review_stale == false` check. The Step 7-only re-run inside Step 7.5's fix flow intentionally does not re-fire the launch (no collect point follows it; overlapping that path stays out of scope). The sibling first-pass code-review launch is unchanged (handoff measure M1a; measure M1b covers the code-review side). Same analysis, payload, and collect point as before — the re-run passes only reorder the analysis relative to the test phase.
+
 ### dev-workflow v1.54.2 / dev-workflow-bundle v1.56.2
 
 - refactor(dev-workflow): extract Step 3 / Step 8 review-category rubrics into an on-demand reference (no behavior change)
