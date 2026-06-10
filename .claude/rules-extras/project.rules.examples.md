@@ -240,3 +240,21 @@
 
 ### Dual-directory config split for auto-load scope segregation
 **Good**: `extract-rules` で rule files（`.md` / `.local.md`）と examples（`.examples.md`）の auto-load 振り分けを分離する場合、既存 `output_dir: .claude/rules` 不変 + 新 `examples_output_dir: .claude/rules-extras` で dual-dir 設計。Configuration table description に「`output_dir`: inside `.claude/rules/**` auto-load scope」「`examples_output_dir`: outside auto-load scope by default — set to `output_dir` to opt examples back into auto-load」と各 dir の auto-load 帰結を明記。Migration は `--restructure` で legacy co-located レイアウト（旧 `.claude/rules/<name>.examples.md`）を新 `examples_output_dir` 配下に自動移行。**Bad**: 単一 `output_dir` 維持で `paths:` frontmatter の有無等で control 試みる → loader 仕様非公開で観測のみ、frontmatter で auto-load 制御の実効性保証なし、directory placement に倒した方が確実な scope segregation を得られる。
+
+### zsh unquoted-variable no-word-split (`while IFS= read -r`, not `for x in $var`)
+**Good:**
+```bash
+bundle_skills=$(jq -r '(.plugins[] | select(.name == "dev-workflow-bundle") | .skills[]) // empty' .claude-plugin/marketplace.json)
+printf '%s\n' "$bundle_skills" | while IFS= read -r entry; do
+  name=${entry#./skills/}
+  diff -rq "skills/$name/skills/$name" "plugins/dev-workflow-bundle/skills/$name"
+done
+```
+**Bad:**
+```bash
+# zsh は unquoted 変数を語分割しないため、複数行出力でも 1 要素として 1 回しか回らない
+# （bash では IFS 分割で複数回回る — flavor divergence による silent 1-iteration bug）
+for entry in $bundle_skills; do
+  ...
+done
+```
