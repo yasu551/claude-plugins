@@ -6,7 +6,7 @@
 - エビデンス・信頼度等の詳細情報は不要（コンテキスト削減のため）
 - 一般知識で判断可能なことはルールに含めない
 - AIに判断を委ねる方針（細かく書きすぎない）
-- SKILL.md 内外の相互参照は、サブステップ番号（例: `Step 2.7`）ではなく安定した節見出し・フレーズ（例: `Step 2 difficulty assessment`）で記述する。サブステップ追加/挿入時にリンク切れが多発するため
+- SKILL.md 内外の相互参照は、サブステップ番号**単独**（例: `Step 2.7`）で書かず、安定した節見出し・フレーズを必ず含める。許容形は 2 つ: (i) 安定フレーズ単独（例: `Step 2 difficulty assessment`）、(ii) **番号 + 安定記述子のペア形**（例: `Step 8 sub-step 1's review-payload definition`、`Step 7's "Concurrent code review launch" paragraph`）— 現行 SKILL.md で確立済みの convention はペア形。禁止対象は bare number 単独参照のみ（サブステップ追加/挿入時にリンク切れが多発するため。ペア形は番号がずれても記述子が grep 解決の anchor になる）
 
 ## allowed-tools設計
 
