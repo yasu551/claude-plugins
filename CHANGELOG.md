@@ -2,6 +2,11 @@
 
 ## 2026-06-10
 
+### dev-workflow v1.54.2 / dev-workflow-bundle v1.56.2
+
+- refactor(dev-workflow): extract Step 3 / Step 8 review-category rubrics into an on-demand reference (no behavior change)
+  - Moves the Step 3 plan-review category bodies (a)–(f) and the Step 8 code-review category bodies (a)–(c) verbatim to the new `references/review-categories.md` (§ Plan review categories / § Code review categories). SKILL.md keeps label-only enumerations at both dispatch sub-steps plus an instruction for the reviewer to read the matching section; all bold sub-check labels (`Runtime/language major version upgrades`, `Internal convention citation verification`, `Cross-component sibling coverage`, etc.) are preserved verbatim so external citations (`references/simplicity-self-audit.md`, `references/plan-format.md`) keep resolving. The only non-verbatim change is rebasing the two relative link targets `](references/plan-format.md)` → `](plan-format.md)` inside the moved Step 3 body. Resident SKILL.md size drops from 144,481 to 127,343 chars (−17,138); the rubric loads on demand in the reviewer's context and is never loaded on Trivial (N=0) runs. Same extraction + stable-anchor pattern as v1.54.1 (handoff measure M2; the realized reduction is below the handoff's 20–25k estimate because the actual rubric bodies measure 18.3k).
+
 ### extract-rules v1.20.1 / dev-workflow-bundle v1.56.1
 
 - fix(extract-rules): retarget the § Sub-skill caller directive's locator for dev-workflow's Pre-invocation reminder
