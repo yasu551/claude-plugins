@@ -162,7 +162,7 @@ This is the **author's first-pass judgment** on plan content; Step 3 category (f
 
 ## Step 3 (f) content-quality rubric
 
-Step 3 adds a sixth review category — **f. Presentation & attention allocation (content quality)** — on top of the five categories (a–e) already in `SKILL.md`. Format compliance is already enforced by the Step 2 self-check, so (f) focuses on content.
+Step 3 adds a sixth review category — **f. Presentation & attention allocation (content quality)** — on top of the five categories (a–e) whose rubric bodies live in `references/review-categories.md` § Plan review categories (labels enumerated in `SKILL.md` Step 3). Format compliance is already enforced by the Step 2 self-check, so (f) focuses on content.
 
 Reviewer checks:
 
