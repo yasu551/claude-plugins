@@ -189,14 +189,16 @@ Can be overridden for a single invocation with `-i N` / `--iterations N`, which 
 
 Automatic adjustment by task difficulty (evaluated in Step 2) — the same cap is applied **independently to each phase's count** (they can differ only under the map form):
 
-| Difficulty | Examples | Effect |
-| --- | --- | --- |
-| Trivial | Typo, one-line edit, config value change (single unambiguous solution) | `N_plan = N_code = 0` — Step 3 (Plan Review) & Step 8 (Code Review) skipped entirely |
-| Simple | Typo fix, config tweak, obvious bug fix | `N_plan = N_code = 1` |
-| Moderate | Multi-file changes within one module, feature following existing patterns | `N_plan = min(2, N_plan)`, `N_code = min(2, N_code)` |
-| Complex | Cross-module, new patterns, API changes, significant refactoring | Keep both configured values (`N_plan`, `N_code`) |
+| Difficulty | Examples | Review effect | Quality steps skipped (difficulty-skip matrix) |
+| --- | --- | --- | --- |
+| Trivial | Typo, one-line edit, config value change (single unambiguous solution) | `N_plan = N_code = 0` — Step 3 (Plan Review) & Step 8 (Code Review) skipped entirely | Step 6 Tidy + Step 7.5 Rules Compliance |
+| Simple | Typo fix, config tweak, obvious bug fix | `N_plan = N_code = 1` | Step 6 Tidy only |
+| Moderate | Multi-file changes within one module, feature following existing patterns | `N_plan = min(2, N_plan)`, `N_code = min(2, N_code)` | none |
+| Complex | Cross-module, new patterns, API changes, significant refactoring | Keep both configured values (`N_plan`, `N_code`) | none |
 
-The **Trivial** tier is classified conservatively: only a genuinely self-evident change with a single unambiguous solution qualifies. Any doubt — a multi-part edit, a non-unique fix, or uncertainty about the approach — falls to Simple or above, so internal review (Step 3 / Step 8) is retained. Even for Trivial tasks the Step 4 plan-approval gate, Step 7 / 7.5 checks, and `hooks.on_complete` still run.
+The **difficulty-skip matrix** (rightmost column) is applied unconditionally — keyed on the assessed tier alone, with no config flag — reusing the same pre-completed-mark + entry-point-guard mechanism as the Trivial Step 3 / Step 8 skip. Skipped quality steps are always named in the Completion summary (never silent). **Step 9 (`hooks.on_complete`) is never skipped by the matrix at any tier** — it is a project-configured open list, so difficulty-gating it would make behavior project-dependent.
+
+The **Trivial** tier is classified conservatively: only a genuinely self-evident change with a single unambiguous solution qualifies. Any doubt — a multi-part edit, a non-unique fix, or uncertainty about the approach — falls to Simple or above, so internal review (Step 3 / Step 8) is retained. For Trivial tasks the Step 6 Tidy and Step 7.5 Rules Compliance steps are skipped per the matrix above, while the Step 4 plan-approval gate, Step 7 `check_commands` / `test_commands`, and `hooks.on_complete` still run.
 
 **Exception to Simple**: a change that touches an external library's configuration file or type-level API is classified at least Moderate (not Simple) when the library has had a recent major-version bump. The primary detection is a `git diff` against the base commit on the project's package manifest; when that misses (e.g. the bump landed in a previous task), rely on `git log` on the manifest or conversational context for the same signal. This protects against stale configuration examples being adopted under the Simple heuristic's weakened review iterations.
 
@@ -318,7 +320,7 @@ self_retrospective:
   feedback: "~/retrospectives/dev-workflow"
 ```
 
-**Runs regardless of task difficulty**: Step 11.5 runs whenever `self_retrospective.feedback` is configured, independent of the Step 2 difficulty assessment. Difficulty gates only the review-iteration counts N_plan / N_code (Step 3 / Step 8) — it does **not** gate the self-retrospective. Even Simple/Trivial tasks produce a retrospective when `feedback` is set — when nothing notable surfaced, it is simply short.
+**Runs regardless of task difficulty**: Step 11.5 runs whenever `self_retrospective.feedback` is configured, independent of the Step 2 difficulty assessment. Difficulty gates the review-iteration counts N_plan / N_code (Step 3 / Step 8) and the difficulty-skip matrix (Step 6 Tidy / Step 7.5 Rules Compliance on Trivial / Simple) — it does **not** gate the self-retrospective. Even Simple/Trivial tasks produce a retrospective when `feedback` is set — when nothing notable surfaced, it is simply short.
 
 **User preview + approval is always required**. Before submission, the assembled body is shown to the user along with a destination header (mode / resolved value / settings layer source). The user can `approve`, `edit` (revise inline), or `skip`. In repo mode, an additional explicit confirmation of `<owner/repo>` is asked before the `gh api` POST runs — this is a defense against a malicious commit to the git-tracked `.claude/dev-workflow.md` silently redirecting retrospectives.
 
@@ -484,9 +486,9 @@ The workflow begins at Step 2 (Step 1 is settings load, Step 1.5 is task decompo
 | 3 | Plan Review | Internal review by reviewer (up to N_plan iterations; skipped entirely for Trivial tasks, N_plan=0) |
 | 4 | Finalize Plan | **User approval gate** |
 | 5 | Implement | Follow the plan |
-| 6 | Tidy | Reduce complexity via the built-in `simplify` skill (falls back to the in-house `tidy` skill when `simplify` is unavailable) |
+| 6 | Tidy | Reduce complexity via the built-in `simplify` skill (falls back to the in-house `tidy` skill when `simplify` is unavailable); skipped for Trivial / Simple tasks per the difficulty-skip matrix |
 | 7 | Check / Test | Run check_commands + run-tests |
-| 7.5 | Rules Compliance Review | Verify `.claude/rules/` compliance via `rules-review` skill |
+| 7.5 | Rules Compliance Review | Verify `.claude/rules/` compliance via `rules-review` skill; skipped for Trivial tasks per the difficulty-skip matrix |
 | 8 | Code Review | Code review by reviewer (up to N_code iterations; skipped entirely for Trivial tasks, N_code=0) |
 | 9 | Completion Hooks | Run `hooks.on_complete` (only if configured) |
 | 10 | Interactive Commits | (Only when `interactive_commits: true`) Group working-tree changes into commits and iterate per-commit with the user. The workflow never pushes — that stays the user's responsibility |
