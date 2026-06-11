@@ -457,7 +457,7 @@ On entry to Step 10, initialize `landed_count = 0` before running the procedure 
 
 Read [`references/interactive-commits.md`](references/interactive-commits.md) and follow the procedure from top to bottom — it is the single canonical home for Step 10's procedure body. The **Approval token closed list** and **Localized summary tokens** below stay defined in this file and are referenced from both that procedure and other Steps.
 
-**Approval token closed list** (per § No-Stall Principle's "do not rely on exact-phrase matching" rule). The example phrases below are illustrative, not literal discriminators — categorize each user response into one of the four buckets via semantic judgment:
+**Approval token closed list** (per § No-Stall Principle's "do not rely on exact-phrase matching" rule). The example phrases below are illustrative, not literal discriminators — categorize each user response into one of the four buckets via semantic judgment. When presenting an approval gate, include at least one short-form token from the accept bucket (e.g., "OK", "LGTM", "next") so users know brief responses are valid.
 
 - **accept**: explicit affirmative — "OK" / "approve" / "next" / "LGTM" / "コミットして" / "進めて" / "いいよ" or any semantic equivalent
 - **adjust**: specific revision request — "subject を ... に" / "this file should be in commit 2" / "split this commit" / any other concrete change demand
