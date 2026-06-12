@@ -57,7 +57,7 @@ Concrete operational rules for main when handling the subagent's return:
 
 ### 2.1 Spawn the subagent
 
-Use the `Agent` tool (`subagent_type: general-purpose`). Embed the following in the prompt:
+Use the `Agent` tool (`subagent_type: general-purpose`, plus `model: <subagent_model>` when the SKILL.md Step 2-resolved `subagent_model` is a model id — omit `model` when it is `inherit`, the backward-compatible default). Embed the following in the prompt:
 
 - **Session file**: the absolute path resolved in §1.4
 - **Reference file**: the absolute path of this file, so the subagent can read §2 and §3 as its authoritative working spec

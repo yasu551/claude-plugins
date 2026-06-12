@@ -18,6 +18,7 @@ The caller passes these fields in natural language (the skill extracts them from
 
 - `Base ref` *(optional, default `HEAD`)* — git ref to diff against
 - `Max iterations` *(optional, default `2`)* — upper bound on the refinement loop
+- `Model` *(optional, default `sonnet`)* — model for the reviewer `Agent` dispatch (`sonnet` / `opus` / `haiku`, or `inherit` to use the session model). An **independent optional field** — adding it does not turn the contract into a fixed-arity mode gate (the other fields keep their own defaults). **Default `sonnet`**: publicity-review's detection task is mechanical pattern-matching (secrets / paths / URLs), so it runs on `sonnet` by default — a deliberate skill-side cost choice that applies to **every** caller (e.g. `dev-workflow-triage`, `dev-workflow`'s `hooks.on_complete`). A caller-supplied `Model:` value **wins over** this default (arg-wins). The model applies **only on the Claude Code `Agent`-dispatch path**; on the inline fallback path no `Agent` is spawned, so it is moot (the executing agent's own model governs).
 
 The caller must **not** stage changes while this skill is running. The skill reads the working tree vs `Base ref`; staged content would mix into the diff and corrupt the verdict.
 
@@ -25,7 +26,7 @@ The caller must **not** stage changes while this skill is running. The skill rea
 
 ### Step 1 — Extract context (main thread)
 
-1. Parse the two fields from the invocation text.
+1. Parse the fields from the invocation text (`Base ref`, `Max iterations`, and the optional `Model:`). Resolve the reviewer model: caller-supplied `Model:` if present and valid, else the skill-side default `sonnet` (per § Invocation contract). Hold it for Step 2 (a).
 2. Run `git diff <Base ref>`. This captures working-tree-vs-base; no staging is assumed.
 3. If the diff is empty, return early:
    ```json
@@ -43,7 +44,7 @@ There is no explicit pre-flight diff-size cap — sibling review skills (`ask-pe
 
 On iter 1, `Read` the full current contents of each `affected_files` entry. On `i ≥ 2`, only re-`Read` the subset of `affected_files` whose path appeared in a successfully-applied `suggested_edits` entry during iter `i-1` (untouched files keep their iter-1 snapshot — re-reading them is wasted work and balloons main-thread context). On `i ≥ 2`, also re-run `git diff <Base ref>` so the diff reflects edits that landed in prior iterations.
 
-Invoke the `Agent` tool to dispatch a fresh reviewer. Assemble the dispatch prompt from the four sections below, each framed with a clear `--- LABEL ---` fence (same convention as `verify-diff` § Step 3 (a) Dispatch bias-free executor and `skill-review` § Step 3 (a) Dispatch reviewer Agent) so the reviewer can parse each payload unambiguously:
+Invoke the `Agent` tool to dispatch a fresh reviewer, passing the resolved model (Step 1) as the `Agent` `model` parameter — the caller-supplied `Model:` if present, else the skill-side default `sonnet`; pass no `model` only when the resolved value is `inherit`. Assemble the dispatch prompt from the four sections below, each framed with a clear `--- LABEL ---` fence (same convention as `verify-diff` § Step 3 (a) Dispatch bias-free executor and `skill-review` § Step 3 (a) Dispatch reviewer Agent) so the reviewer can parse each payload unambiguously:
 
 - `--- DIFF ---`: the unified diff (current `git diff <Base ref>` output)
 - `--- AFFECTED FILES ---`: each `affected_files` entry's path + full current contents (one block per file, separated by `### <path>` sub-headings)
