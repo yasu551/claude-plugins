@@ -2,6 +2,13 @@
 
 ## 2026-06-13
 
+### dev-workflow v1.63.0 / dev-workflow-bundle v1.65.0
+
+- feat(dev-workflow): `--init` now detects template-feature drift in an existing `run-tests` skill and offers to fix it
+  - Step 4a's existing-`run-tests` detection (`references/init-mode.md`) previously hit "Current format → use as-is, skip generation" whenever the skill satisfied the four structural predicates (Agent tool / subagent pattern / three-status contract / `--base-commit` input). The gap-detection list checked only Prerequisites / Docker readiness, so the `model: sonnet` subagent directive added to the template in v1.62.0 was never proposed on re-run.
+  - The control sentence is rewritten so a detected gap **overrides** the skip, and the gap list is restructured into two disposition classes: **surgical in-place patch** (add only the missing directive via an `Edit`, preserving the project's detected test commands / prerequisites / description / allowed-tools) and **regenerate** (the existing Prerequisites / Docker structural gaps). The missing `model: sonnet` directive is the first surgical-patch entry. The list is documented as a **closed list of known template features** (append on a new load-bearing template feature) rather than a full-file diff, which would false-positive on the per-project content `--init` intentionally adapts.
+  - This makes the v1.62.0 CHANGELOG's promised adoption path ("re-run `/dev-workflow --init` … to adopt it") actually work — re-running `--init` now proposes the `model: sonnet` addition instead of silently skipping the Current-format skill.
+
 ### dev-workflow v1.62.0 / dev-workflow-bundle v1.64.0
 
 - feat(dev-workflow): give the generated `run-tests` skill a skill-side default model (`sonnet`) on its verification subagent dispatch
