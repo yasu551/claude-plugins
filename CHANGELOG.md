@@ -2,6 +2,13 @@
 
 ## 2026-06-13
 
+### dev-workflow v1.64.0 / dev-workflow-bundle v1.66.0
+
+- feat(dev-workflow): `--init` step 4a adds a **Template-conformance backstop** so an existing `run-tests` skill is checked for completeness against the template, not only against a closed gap list
+  - The v1.63.0 entry below added a `model: sonnet` surgical-patch entry to step 4a's known-gaps list, but documented that list as the completeness boundary ("closed list of known template features … rather than a full-file diff"). That left the root failure unaddressed: any load-bearing template directive **not yet enumerated** as a known gap is silently skipped — exactly how the `model: sonnet` drift went undetected until it was added by hand. The hand-addition itself is the evidence of the gap class.
+  - Step 4a (`references/init-mode.md`) now runs a **Template-conformance backstop** after the known-gaps checks: it compares the existing skill against the embedded template across every **non-adaptive span** and surfaces any load-bearing instruction / named contract that is absent or contradicted (judged by meaning, not literal lines). A small, stable **Adaptive regions** closed list — `description` / the `Bash(...)` command entries / Prerequisites / the test-command enumeration / the Subagent Instructions' project-specific checks body (but **not** the three-status Return Format contract, which stays compared) — is excluded so the per-project content `--init` adapts never false-positives. Excluding the adaptive regions is what distinguishes this from the literal full-file diff the prior entry declined on false-positive grounds. Backstop-detected gaps are offered as a regenerate.
+  - The maintenance burden inverts: the known-gaps list now supplies tailored surgical patches for common drift (maintained bidirectionally — promote recurring backstop hits, drop entries the template no longer carries), while completeness rests on the small adaptive-region exclusion rather than on enumerating every load-bearing feature.
+
 ### dev-workflow v1.63.0 / dev-workflow-bundle v1.65.0
 
 - feat(dev-workflow): `--init` now detects template-feature drift in an existing `run-tests` skill and offers to fix it
