@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-15
+
+### dev-workflow v1.69.0 / dev-workflow-bundle v1.69.0
+
+- feat(dev-workflow): track post-implementation working-tree changes per review hook, so any change no review hook claims responsibility for surfaces before commit grouping (auto-triage #99)
+  - **Step 5** gains sub-step 9 (**Implementation diff snapshot**): at the end of Step 5, after all planned edits and the derived-value deferral sub-step land, `git diff <base-commit> --name-only` is captured as `implementation_diff_paths` — the tracked paths the implementation changed, recorded before any review hook (Steps 6–9) runs.
+  - **Step 10** gains a **Post-hook attribution check**: it derives `hook_introduced_paths = step10_diff_paths − implementation_diff_paths`, cross-references those against the Step 6 cross-layer review handoff ledger's applied sites, and surfaces any path no review hook claimed as **unattributed** — requiring confirm-as-side-effect or revert before commit grouping.
+  - The attribution check first **subtracts the § Workflow artifacts (cross-step fixed exclusion) set**, so workflow-owned in-session state (e.g. a plan file the ledger wrote a leftover into) is never falsely flagged as unattributed — honoring the skill's canonical exclusion that every changed-file-set-building step must apply.
+  - **Version alignment**: dev-workflow jumps 1.66.0 → 1.69.0 to match dev-workflow-bundle (both now 1.69.0), closing the prior plugin-version skew.
+
 ## 2026-06-14
 
 ### dev-workflow v1.66.0 / dev-workflow-bundle v1.68.0
