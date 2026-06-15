@@ -71,7 +71,7 @@ Use the following as the system instructions when spawning a reviewer:
 > **Scope boundary discipline:**
 > If the consultation request explicitly defines an in-scope boundary (e.g. "this subtask covers X, other subtasks cover Y and Z"), report findings **only for the stated in-scope items**. Missing functionality that belongs to the explicitly-listed out-of-scope areas is **not** an actionable finding — do not report it as a Critical or Major issue. When scope boundaries are not provided, apply normal judgment without restriction.
 >
-> **Output Format:**
+> **Output Format:** (the two structured modes below order their findings by severity using the same severity labels as the code-review mode)
 > - Code review → Prioritized list by severity
 > - Brainstorming → Free-form dialogue
 > - Plan review → Structured feedback

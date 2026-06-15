@@ -74,7 +74,7 @@ Look for user preferences and classify them:
    - Language-specific → `<output_dir>/languages/<lang>.md`
    - Framework-specific → `<output_dir>/frameworks/<framework>.md`
    - Integration-specific → `<output_dir>/integrations/<framework>-<integration>.md`
-   - Project-level → `<output_dir>/project.md`
+   - Project-level → `<output_dir>/project.md` (but a conversation-extracted 1st-observation project-specific pattern stages first — see item 3 branch (iii); it reaches `project.md` only on promote)
 
    **By default** (`split_output: true`): Conversation-extracted **project-specific patterns** always go to `.local.md` files. Principles may be added to shared files. `project.md` is always a single file — project-level items go there regardless of `split_output`. Promoting patterns to shared files should be done manually or via organization-level merge.
 
