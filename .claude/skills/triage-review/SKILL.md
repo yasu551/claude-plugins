@@ -1,7 +1,7 @@
 ---
 name: triage-review
 description: Daily review of the latest origin triage-* branch. Operator-prepared invariant — the operator fetches origin and switches the local repository to the triage branch before invocation. The skill verifies that the current branch matches `triage-*`, then dispatches `Skill(prompt-tuning)` per prompt-eligible changed file, `Skill(skill-review)` with `Base ref: main`, and `Skill(publicity-review)` with `Base ref: main` in sequence, finally emits a summary. Project-local routine — not for marketplace distribution.
-allowed-tools: TaskCreate, TaskUpdate, TodoWrite, Skill(prompt-tuning), Skill(skill-review), Skill(publicity-review), Bash(git rev-parse *), Bash(git symbolic-ref *), Bash(git status --porcelain*), Bash(git diff *), Bash(git stash *)
+allowed-tools: TaskCreate, TaskUpdate, TodoWrite, Skill(prompt-tuning), Skill(skill-review), Skill(publicity-review), Bash(git rev-parse *), Bash(git symbolic-ref *), Bash(git status --porcelain*), Bash(git diff *), Bash(git show *), Bash(git stash *), Bash(jq *)
 ---
 
 # Triage Review
@@ -53,8 +53,8 @@ Japanese (`ja`) only. The 3-rule localization regimen (Translate generic concept
 
 **This skill's verbatim-preserve token set** (additions beyond the canonical list):
 
-- Enum values: `converged`, `max-iter`, `skipped`, `unparsed`, `error`, `no-actionable-findings`, `applied-edits`, `notes-left`, `framing-failed`, `ok`, `restored`, `not needed (clean tree)`, `restore failed`
-- Field labels: `status:`, `iterations_used:`, `applied:`, `notes_remaining:`, `findings:`, `remaining:`, `framing:`, `auto-stash:`
+- Enum values: `converged`, `max-iter`, `skipped`, `unparsed`, `error`, `no-actionable-findings`, `applied-edits`, `notes-left`, `framing-failed`, `ok`, `restored`, `not needed (clean tree)`, `restore failed`, `VIOLATION`
+- Field labels: `status:`, `iterations_used:`, `applied:`, `notes_remaining:`, `findings:`, `remaining:`, `framing:`, `auto-stash:`, `release-integrity:`
 
 ## Step 1 — Pre-flight
 
@@ -112,6 +112,25 @@ Hold the output as `changed_files` in main-thread context.
   - If `len(prompt_targets) > 5`, keep the first 5 entries and record `prompt_targets_overflow_count = len(prompt_targets) - 5`. Otherwise `prompt_targets_overflow_count = 0`
 
 Deleted files (those listed in `changed_files` but absent from working tree) require no special handling at this layer — the downstream callees see them through their own `git diff` invocations with appropriate base.
+
+On the non-empty path, proceed next to § Release-integrity check (deterministic bump-presence), then § Step 3.
+
+## Release-integrity check (deterministic bump-presence)
+
+Runs after § Step 2 — Capture changed files (non-empty `changed_files` path only) and before § Step 3. Read-only git/jq check — no subagent dispatch, so no `§ No-Stall Principle` return-point reminder; proceed to § Step 3 when done. Computes `release_integrity_result`, rendered by § Step 6 (see § Form 3 content).
+
+**Scope — backstop, not a full validator.** It checks **bump-presence** (the marketplace version-number delta across the diff endpoints) **and whether `CHANGELOG.md` was touched**. It does **not** validate CHANGELOG subsection format (e.g. the paired `### <skill> v… / dev-workflow-bundle v…` invariant) — a diff that bumps versions but omits the CHANGELOG subsection is out of scope.
+
+A version read uses the canonical `// "unknown"` + post-pipeline `-z` guard (same two-stage pattern as Step 1's `current_version`): `v=$(git show <ref>:.claude-plugin/marketplace.json | jq -r '(.plugins[] | select(.name == "<plugin>") | .version) // "unknown"' 2>/dev/null); [ -z "$v" ] && v=unknown`. A read of `unknown` means the version could not be determined — a git/jq error, or an absent `marketplace.json` entry. A value is **bumped** only when **both** its `main:` and `HEAD:` reads are concrete (≠ `unknown`) **and** they differ; if either read is `unknown` the value is **not bumped** (it routes to the conservative `could not verify` violation in step 5 rather than silently passing). **Net-of-stack**: `main..HEAD` may be a cumulative stack of `triage-*` branches (§ Fixed configuration), so this compares the two endpoints' net state ("was it bumped at all"), not per-commit.
+
+**Procedure**:
+
+1. **Load the authoritative bundle membership** from `marketplace.json`'s `dev-workflow-bundle.skills` array — `jq -r '(.plugins[] | select(.name == "dev-workflow-bundle") | .skills[]) // empty' .claude-plugin/marketplace.json` (same source as `verify-bundle-sync`) — giving the `./skills/<name>` member list. Reading the list rather than hard-coding member names keeps this check in lock-step with bundle membership and avoids a blind spot when a member is added. **Detect changed bundle skills** from `changed_files` (Step 2's `git diff --name-only main HEAD` output) using **path-segment equality** (not substring match — same discipline as § Step 2's filter rules): a path marks member `<name>` changed when a path segment exactly equals `<name>` with a preceding `skills` segment, or under `plugins/dev-workflow-bundle/skills/<name>/` (the canonical double-nest `skills/<name>/skills/<name>/…` matches by its leading `skills/<name>` pair). Map each changed member to its plugin name via `.claude/skills/dev-workflow-triage/SKILL.md` § Step 3.7 (c) Plugin mapping — only `ask-peer` → `peer` differs from the skill name; every other member (including any absent from that table) maps to its own name.
+   - If no bundle skill changed, set `release_integrity_result = ok` and proceed to § Step 3.
+2. **Run-level facts — compute once, not per skill**: **bundle bumped** = the `dev-workflow-bundle` version is bumped; **CHANGELOG touched** = `CHANGELOG.md` ∈ `changed_files`.
+3. **Per changed bundle skill**: **member bumped** = that skill's `<plugin>` version is bumped. The skill is a **violation** when any of {member bumped, bundle bumped, CHANGELOG touched} is false.
+4. **Record** `release_integrity_result`: `ok` when no changed bundle skill is a violation; otherwise the list of violating skills with their per-skill {member bumped / bundle bumped / CHANGELOG touched} flags.
+5. **Non-fatal**: a violation is recorded and the run continues — never a fatal abort. When a violation's cause is an **unverifiable** read (a `main:`/`HEAD:` version that resolved to `unknown` — git/jq error or an absent `marketplace.json` entry) rather than a confirmed missing bump, record reason `could not verify` and emit the could-not-verify warning variant — so an unverifiable read surfaces rather than silently passing as `ok`. The section adds no new exit path, so the § Auto-stash restore invariant is unaffected. `release_integrity_result` is computed and rendered **only on the form-3 path** — the § Step 2 form-2 exit (empty `changed_files`) returns before this section, so it is never referenced there.
 
 ## Step 3 — Run `Skill(prompt-tuning)` per file
 
@@ -201,6 +220,7 @@ When form 3 fires, render in Japanese:
 - prompt-tuning ファイル別判定（per file）: 各ファイルの分類（`converged` / `max-iter` / `skipped` / `skipped (agent unavailable)` / `error` / `unparsed`）
 - skill-review: `<status> (iterations: <K>, applied: <A>, notes_remaining: <R>, framing: <framing_status>)`。`framing_status` ∈ {`ok`, `framing-failed (suspected — iter=0 on non-empty main..HEAD)`}
 - publicity-review: `<status> (iterations: <K>, applied: <A>, findings: <F>, remaining: <R>)`
+- release-integrity: `<ok | VIOLATION (<N> skills)>` — § Release-integrity check (deterministic bump-presence) で算出した `release_integrity_result` を描画。bundle skill 変更が無いか全て bump/CHANGELOG 揃いなら `ok`、欠落があれば `VIOLATION (<N> skills)`（`<N>` = 違反 skill 数、詳細は下の warning 行）
 - auto-stash: `restored` / `not needed (clean tree)` / `restore failed` — `auto_stashed` が true で pop 成功なら `restored`、`auto_stashed` が false なら `not needed (clean tree)`、pop 失敗なら `restore failed`（詳細は下の warning 行）
 
 Warning lines (one per non-fatal incident) follow the main fields:
@@ -210,6 +230,7 @@ Warning lines (one per non-fatal incident) follow the main fields:
 - `skill-review: framing-failed (suspected — iter=0 on non-empty main..HEAD)` — single line
 - `skill-review: error (<reason>)` — single line
 - `publicity-review: error (<reason>)` — single line
+- `release-integrity: <skill> changed without paired bump / CHANGELOG (member bump: <yes/no>, bundle bump: <yes/no>, changelog: <yes/no>)` — per violating skill (set by § Release-integrity check (deterministic bump-presence)); a skill whose `main:`/`HEAD:` version read resolved to `unknown` renders the variant `release-integrity: <skill> could not be verified (version read returned unknown — git/jq error or absent marketplace entry)`
 - `auto-stash restore failed: <reason> — changes preserved in \`git stash list\`; resolve the conflict before the handoff \`git switch main\` step` — single line, **form 3 only** (a pop conflict can occur here because callees may have edited files in `main..HEAD`). On the form 2 path the working tree is still == HEAD so the pop cannot conflict; if it nonetheless fails for some other reason, emit the generic variant `auto-stash restore failed: <reason> — changes preserved in \`git stash list\`` (form 2 has no `git switch main` handoff note, so the conflict-resolution clause is omitted)
 - `auto-stash: orphaned entry from a prior run detected in \`git stash list\` — recover it manually` — single line, emitted under **form 1, form 2, or form 3** whenever `orphan_stash_detected` is true (set by § Step 1 check 3's orphan scan). Independent of which form fires and of this run's own stash outcome
 
