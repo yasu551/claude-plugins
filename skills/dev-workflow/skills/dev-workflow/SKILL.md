@@ -511,7 +511,7 @@ Read [`references/interactive-commits.md`](references/interactive-commits.md) an
 
    When not skipped (`compact_rules: true`): read [`references/update-rules.md`](references/update-rules.md) and follow § Char-count compaction gate from top to bottom — it is the single canonical home for this sub-step's procedure body, including the **Step 11 compaction approval gate** (USER APPROVAL GATE).
 
-4. If extract-rules is unavailable, skip this step and inform user
+4. If extract-rules is unavailable: before skipping, save any reusable patterns or insights that surfaced during the workflow to `.claude/plans/rules-candidates-<YYYY-MM-DD>.md` (append if the file already exists) so the knowledge is not silently lost and can be handed off to a later manual `Skill(extract-rules)` run. Inform the user that extract-rules is unavailable and point to the saved candidates file.
 5. After the applicable invocations above return, or after the step was skipped because extract-rules is unavailable — regardless of whether new rules were added or the report indicates nothing changed — mark `Step 11: Update Rules` as `completed` and proceed automatically. Per the No-Stall Principle, do not wait for user input.
 6. If extract-rules wrote any changes to `.claude/rules/` during sub-steps 1, 2, or 3, record the count so § Completion can surface the manual-commit reminder. The compaction-specific count (file-unit `compaction_applied_count`) is rendered separately by § Completion's "Step 11 compaction reminder" — see § Completion below
 
