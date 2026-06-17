@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>プランレビュー — dev-workflow</title>
+
+  <!-- highlight.js theme (cdnjs, pinned + SRI) -->
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github.min.css"
+    integrity="sha512-0aPQyyeZrWj9sCA46UlmWgKOP0mUipLQ6OZXu8l4IcAmD2u31EPEy9VcIMvl7SoAaKe8bLXZhYoMaE/in+gcgA=="
+    crossorigin="anonymous" referrerpolicy="no-referrer">
+
+  <!-- marked (UMD) + highlight.js (UMD): classic scripts run before the deferred module below,
+       so window.marked / window.hljs are ready when the render logic runs. -->
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/marked/16.3.0/lib/marked.umd.min.js"
+    integrity="sha512-V6rGY7jjOEUc7q5Ews8mMlretz1Vn2wLdMW/qgABLWunzsLfluM0FwHuGjGQ1lc8jO5vGpGIGFE+rTzB+63HdA=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"
+    integrity="sha512-EBLzUL8XLl+va/zAsmXwS7Z2B1F9HUHkZwyS/VKwh3S7T/U0nF4BaU29EP/ZSf6zgiIxYAnKLu6bJ8dqpmX5uw=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+  <style>
+    :root {
+      --fg: #1f2328;
+      --muted: #59636e;
+      --border: #d1d9e0;
+      --accent: #0969da;
+      --bg: #ffffff;
+      --bg-soft: #f6f8fa;
+      --approve: #1a7f37;
+      --revise: #bc4c00;
+      --bar-h: 64px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", Meiryo, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+      line-height: 1.7;
+    }
+    #app {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 32px;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 24px calc(var(--bar-h) + 32px);
+    }
+    /* section nav */
+    #toc {
+      position: sticky;
+      top: 24px;
+      align-self: start;
+      max-height: calc(100vh - 48px);
+      overflow: auto;
+      font-size: 13px;
+      border-right: 1px solid var(--border);
+      padding-right: 16px;
+    }
+    #toc .toc-title { font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+    #toc a { display: block; color: var(--muted); text-decoration: none; padding: 2px 0; }
+    #toc a:hover { color: var(--accent); }
+    #toc a.toc-h2 { padding-left: 12px; }
+    #toc a.toc-h3 { padding-left: 24px; font-size: 12px; }
+    /* main */
+    header.plan-head { grid-column: 1 / -1; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 8px; }
+    header.plan-head h1 { font-size: 18px; margin: 0; }
+    header.plan-head .meta { color: var(--muted); font-size: 13px; }
+    main#plan { min-width: 0; }
+    section.block {
+      position: relative;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 4px 12px;
+      margin: 4px 0;
+    }
+    section.block:hover { border-color: var(--border); background: var(--bg-soft); }
+    .block-body > :first-child { margin-top: 8px; }
+    .block-body h1 { font-size: 22px; }
+    .block-body h2 { font-size: 18px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+    .block-body h3 { font-size: 15px; }
+    .block-body pre {
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      overflow: auto;
+    }
+    .block-body code:not(pre code) {
+      background: var(--bg-soft);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 0.9em;
+    }
+    .block-body table { border-collapse: collapse; }
+    .block-body th, .block-body td { border: 1px solid var(--border); padding: 4px 10px; }
+    .block-body .mermaid { background: var(--bg); text-align: center; margin: 8px 0; }
+    .block-body blockquote { border-left: 3px solid var(--border); margin: 8px 0; padding: 0 12px; color: var(--muted); }
+    /* comments */
+    .block-tools { margin: 4px 0; }
+    .comment-btn {
+      font-size: 12px;
+      color: var(--muted);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 10px;
+      cursor: pointer;
+    }
+    .comment-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .comment-btn.has-comment { color: var(--revise); border-color: var(--revise); font-weight: 600; }
+    .comment-input {
+      display: block;
+      width: 100%;
+      min-height: 64px;
+      margin: 6px 0 10px;
+      padding: 8px;
+      font: inherit;
+      font-size: 13px;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      resize: vertical;
+    }
+    /* sticky decision bar */
+    #bar {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      height: var(--bar-h);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 24px;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
+    }
+    #bar .decision { display: flex; gap: 8px; }
+    #bar label.choice {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    #bar label.choice:has(input:checked).approve { border-color: var(--approve); color: var(--approve); font-weight: 600; }
+    #bar label.choice:has(input:checked).revise { border-color: var(--revise); color: var(--revise); font-weight: 600; }
+    #bar .spacer { flex: 1; }
+    #bar .count { color: var(--muted); font-size: 13px; }
+    #send-btn {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      padding: 8px 20px;
+      cursor: pointer;
+    }
+    #send-btn:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+    #status { color: var(--revise); font-size: 13px; }
+    #done {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 40px;
+      font-size: 16px;
+      color: var(--approve);
+    }
+    #app.submitted main#plan, #app.submitted #toc { opacity: 0.5; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header class="plan-head">
+      <h1>プランレビュー</h1>
+      <div class="meta">プラン: <span id="plan-id">…</span> ／ 各ブロックにコメントを付け、下部で「承認」か「修正を依頼」を選んで送信してください。</div>
+    </header>
+    <nav id="toc"><div class="toc-title">セクション</div></nav>
+    <main id="plan"></main>
+    <div id="done" hidden>送信しました。ターミナルに戻ってください。</div>
+  </div>
+
+  <div id="bar">
+    <div class="decision">
+      <label class="choice approve"><input type="radio" name="decision" value="approve"> 承認</label>
+      <label class="choice revise"><input type="radio" name="decision" value="revise"> 修正を依頼</label>
+    </div>
+    <span class="count">コメント <span id="comment-count">0</span> 件</span>
+    <span class="spacer"></span>
+    <span id="status"></span>
+    <button id="send-btn" type="button" disabled>Claude に送信</button>
+  </div>
+
+  <script type="module">
+    import mermaid from "https://esm.sh/mermaid@11.15.0";
+
+    const state = { decision: null, comments: new Map() }; // blockId -> comment text
+
+    mermaid.initialize({ startOnLoad: false, theme: "default", securityLevel: "strict" });
+
+    async function init() {
+      const res = await fetch("/api/plan");
+      if (!res.ok) throw new Error(`/api/plan HTTP ${res.status}`);
+      const { id, blocks } = await res.json();
+      document.getElementById("plan-id").textContent = id;
+      const planEl = document.getElementById("plan");
+      for (const block of blocks) planEl.appendChild(renderBlock(block));
+      highlightCode(planEl);
+      await renderMermaid(planEl);
+      buildToc(planEl);
+    }
+
+    function renderBlock(block) {
+      const section = document.createElement("section");
+      section.className = "block";
+      section.dataset.blockId = block.id;
+      section.dataset.excerpt = block.markdown.replace(/\s+/g, " ").trim().slice(0, 40);
+
+      const body = document.createElement("div");
+      body.className = "block-body";
+      body.innerHTML = window.marked.parse(block.markdown);
+      section.appendChild(body);
+
+      const tools = document.createElement("div");
+      tools.className = "block-tools";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "comment-btn";
+      btn.textContent = "このブロックにコメント";
+      const area = document.createElement("textarea");
+      area.className = "comment-input";
+      area.placeholder = "このブロックへのコメント…";
+      area.hidden = true;
+      area.addEventListener("input", () => {
+        const v = area.value.trim();
+        if (v) state.comments.set(block.id, area.value);
+        else state.comments.delete(block.id);
+        btn.classList.toggle("has-comment", Boolean(v));
+        document.getElementById("comment-count").textContent = String(state.comments.size);
+      });
+      btn.addEventListener("click", () => {
+        area.hidden = !area.hidden;
+        if (!area.hidden) area.focus();
+      });
+      tools.appendChild(btn);
+      section.appendChild(tools);
+      section.appendChild(area);
+      return section;
+    }
+
+    function highlightCode(root) {
+      root.querySelectorAll("pre code").forEach((el) => {
+        if (el.classList.contains("language-mermaid")) return; // rendered as a diagram instead
+        window.hljs.highlightElement(el);
+      });
+    }
+
+    async function renderMermaid(root) {
+      const nodes = [];
+      root.querySelectorAll("pre code.language-mermaid").forEach((code) => {
+        const div = document.createElement("div");
+        div.className = "mermaid";
+        div.textContent = code.textContent;
+        code.closest("pre").replaceWith(div);
+        nodes.push(div);
+      });
+      if (nodes.length) {
+        try {
+          await mermaid.run({ nodes });
+        } catch (err) {
+          console.error("mermaid render error", err);
+        }
+      }
+    }
+
+    function buildToc(root) {
+      const toc = document.getElementById("toc");
+      const headings = root.querySelectorAll("h1, h2, h3");
+      if (!headings.length) {
+        toc.hidden = true;
+        return;
+      }
+      let i = 0;
+      for (const h of headings) {
+        const anchor = `sec-${i++}`;
+        h.id = anchor;
+        const a = document.createElement("a");
+        a.href = `#${anchor}`;
+        a.textContent = h.textContent;
+        a.className = `toc-${h.tagName.toLowerCase()}`;
+        toc.appendChild(a);
+      }
+    }
+
+    document.querySelectorAll("input[name=decision]").forEach((radio) => {
+      radio.addEventListener("change", () => {
+        state.decision = radio.value;
+        document.getElementById("send-btn").disabled = false;
+      });
+    });
+
+    document.getElementById("send-btn").addEventListener("click", submit);
+
+    async function submit() {
+      if (!state.decision) return;
+      const comments = [];
+      document.querySelectorAll("section.block").forEach((sec) => {
+        const id = sec.dataset.blockId;
+        if (state.comments.has(id)) {
+          comments.push({ block: id, excerpt: sec.dataset.excerpt, body: state.comments.get(id) });
+        }
+      });
+      const sendBtn = document.getElementById("send-btn");
+      const status = document.getElementById("status");
+      sendBtn.disabled = true;
+      status.textContent = "";
+      try {
+        const res = await fetch("/api/submit", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ decision: state.decision, comments }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        document.getElementById("app").classList.add("submitted");
+        document.getElementById("done").hidden = false;
+        document.getElementById("bar").style.display = "none";
+        document.getElementById("done").scrollIntoView({ behavior: "smooth" });
+      } catch (err) {
+        sendBtn.disabled = false;
+        status.textContent = `送信に失敗しました: ${err.message}`;
+      }
+    }
+
+    init().catch((err) => {
+      document.getElementById("status").textContent = `読み込みに失敗しました: ${err.message}`;
+      console.error(err);
+    });
+  </script>
+</body>
+</html>
