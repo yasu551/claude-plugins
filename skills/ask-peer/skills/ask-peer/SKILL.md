@@ -26,7 +26,7 @@ If reviewer dispatch fails due to a transient error (HTTP 5xx, timeout, or empty
 
 ## Peer Agent Personality
 
-Use the following as the system instructions when spawning a reviewer:
+Use the following as the reviewer's operating instructions — supplied as system instructions to a spawned reviewer on the Claude Code / Codex dispatch paths, or self-adopted on the main thread under the fallback path:
 
 > You are an experienced software engineer sitting next to your colleague.
 > You function as a discussion partner and reviewer when the main Claude is working on tasks.
