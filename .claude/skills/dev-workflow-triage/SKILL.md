@@ -108,7 +108,7 @@ fix(<target-skill>): <Finding 1-line summary> (auto-triage #<issue-N>)
 ### Step 1 — Pre-flight (abort with 0 findings on any failure)
 
 - Run `gh --version`. Extract major / minor from the leading line. If < 2.28, set internal flag `no_reason_flag=true` (`gh issue close --reason` was introduced in 2.28)
-- Run `gh auth status`. Non-zero ⇒ abort with "gh not authenticated"
+- Run `gh auth status`. Non-zero ⇒ abort with "gh not authenticated". **All `SonicGarden/dev-workflow-issues` operations (issue comment, issue close, issue list) use `gh` CLI — never GitHub MCP tools.** Claude Code on the Web scopes GitHub MCP to the active working repository; MCP calls targeting `SonicGarden/dev-workflow-issues` will be denied in scoped sessions.
 - Run `git diff --quiet` and `git diff --cached --quiet`. Either non-zero ⇒ abort with "working tree is dirty — uncommitted WIP detected" (prevents folding user WIP into a triage commit)
 - Run `git config --get user.email` and `git config --get user.name`. Either empty ⇒ abort with "git identity not configured" (fresh CI / routine containers often lack this)
 - Detect Web-environment Stop hook (observability only, never abort): run `jq -r '[.hooks.Stop[]?.hooks[]?.command] | join(" ")' ~/.claude/settings.json 2>/dev/null || true`. If the output contains `stop-hook-git-check.sh`, set internal flag `stop_hook_present=true` for the Step 4 summary. File missing / parse failure / `hooks.Stop` absent ⇒ silent skip (flag stays unset). The trailing `|| true` ensures the pipeline status is benign under `set -e`. See `§ Stop hook structural conflict` for what the flag signals to the operator
@@ -156,7 +156,7 @@ If Step 2 reported `0` open issues, this whole prelude (and the per-issue sub-st
 Otherwise, for each issue (in source order from Step 2's listing): the per-issue row registered in Step 2 is flipped to `in_progress` (via `TaskUpdate`, or `TodoWrite` under the fallback) in the same tool-call burst as the next concrete action (typically the body parse or the first `Read`); the row is flipped to `completed` at the end of `§ Close decision`. Two completion paths exist:
 
 - **Normal path** (§ 3.2 parse OK → § 3.3–§ 3.4 → § 3.5 → § 3.6): per-issue row flips to `completed` immediately after Step 3.6's Close decision settles (zero/non-zero exit alike — `close-failed` does not block the row flip)
-- **Whole-issue parse-error path** (§ 3.2 parse-error → § 3.4 skipped → § 3.5 → § 3.6 close-call skipped, reminder dispatch fires): per-issue row flips to `completed` at the reminder dispatch at the bottom of `§ Close decision` — that dispatch is the path's terminal action (Step 3.6 skips the close call by definition for `parse-error`, but the reminder dispatch still fires there, co-located with the row flip)
+- **Whole-issue parse-error path** (§ 3.2 parse-error → § 3.3 + § 3.4 skipped → § 3.5 → § 3.6 close-call skipped, reminder dispatch fires): per-issue row flips to `completed` at the reminder dispatch at the bottom of `§ Close decision` — that dispatch is the path's terminal action (Step 3.6 skips the close call by definition for `parse-error`, but the reminder dispatch still fires there, co-located with the row flip)
 
 Every open issue proceeds directly to body parse; there is no title-level pre-check. Body parse is the canonical discriminator between triage candidates and unparseable issues.
 
@@ -180,6 +180,8 @@ Classify the **whole issue** as `parse-error` (jump to Post triage comment; cont
 Top-level sections other than `### Finding` headings and their labeled fields (e.g. the `## Run context` section in self-retrospective issues) do **not** affect parsing and are not a parse-error condition — this tolerance is an invariant that `§ Step 5 — Self-retrospective`'s issue body depends on; do not tighten it without updating that step's body shape.
 
 #### 3.3 Judge each Finding
+
+**Precondition** — runs only when `§ 3.2 Parse body` classified the issue as parseable. A `parse-error` issue skips this step **and** `§ 3.4 Apply accepted Findings`, jumping from `§ 3.2` straight to `§ 3.5 Post triage comment` (see the **Whole-issue parse-error path** bullet above).
 
 For each Finding, read the target's SKILL.md first — `skills/<target>/skills/<target>/SKILL.md` for the 5 bundle skills, `.claude/skills/dev-workflow-triage/SKILL.md` for the self target (per `§ Fixed configuration`'s Edit target paths); additionally read the target's `references/<file>.md` on demand when the Description or Suggested fix direction clearly points at content outside SKILL.md (e.g. names the file, names a heading/section that belongs to a reference, or describes behavior documented in a reference). Apply `references/triage-criteria.md` to decide `accept` vs `reject`. Store decision + reasoning in memory. Do **not** edit yet.
 
@@ -357,6 +359,8 @@ For each accepted Finding (the per-Finding memory record described above is upda
 `references/triage-criteria.md` § edge-case dispatch table lists the same dispositions in table form — useful as a quick reference; the procedural prose above is authoritative for ordering.
 
 #### 3.5 Post triage comment
+
+**Tool path**: use `gh` CLI exclusively for all `SonicGarden/dev-workflow-issues` operations — never GitHub MCP tools (see `§ Step 1 — Pre-flight`'s "All `SonicGarden/dev-workflow-issues` operations" note for the rationale).
 
 After every Finding in the issue is classified (or immediately, if the whole issue was classified as `parse-error` by Parse body):
 

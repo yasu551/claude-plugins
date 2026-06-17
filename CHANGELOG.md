@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-06-17
+
+### dev-workflow v1.69.3 / dev-workflow-bundle v1.70.5
+
+- fix(dev-workflow): clarify Simplicity self-audit consistency-with-siblings remedy precedence (recovered from an orphaned stash left by the prior triage run)
+  - **`references/simplicity-self-audit.md`** traceability bullet now notes that, for the intra-project "align with sibling implementations" rationale specifically, the **Consistency-with-siblings as primary rationale** item's remedy (surface lighter alternatives in Decisions) supersedes a plain drop. Category: `ambiguity`
+
+### peer v2.4.3 / dev-workflow-bundle v1.70.5
+
+- fix(ask-peer): clarify that the Peer Agent Personality block doubles as dispatch-path system instructions and fallback-path self-adopted persona (recovered from an orphaned stash left by the prior triage run)
+  - Peer Agent Personality intro now reads "the reviewer's operating instructions — supplied as system instructions to a spawned reviewer on the Claude Code / Codex dispatch paths, or self-adopted on the main thread under the fallback path", reconciling the second-person voice across both execution paths. Category: `ambiguity`
+
+### extract-rules v1.20.3 / dev-workflow-bundle v1.70.5
+
+- fix(extract-rules): define the `<name>` slot in the `.examples.md` output path (recovered from an orphaned stash left by the prior triage run)
+  - **`references/conversation-mode.md`** Step C5 item 6 now resolves `<name>` in `<examples_output_dir>/<name>.examples.md` to the routing category's file stem from Step C5 item 2 (`project` for project-level items, the `<lang>` / `<framework>` / `<framework>-<integration>` name otherwise). Category: `ambiguity`
+
+## 2026-06-16
+
+### dev-workflow v1.69.2 / dev-workflow-bundle v1.70.4
+
+- fix(dev-workflow): add domain-assumption verification, interruption re-anchoring, mock/replay-only coverage self-check, destination reachability pre-flight check, knowledge-preservation fallback for extract-rules, and comment-conciseness sub-check (vi) (auto-triage #107, #105, #104)
+  - **`references/simplicity-self-audit.md`** gains **Domain-assumption verification**: claims of uniqueness or universality ("X is the only option", "X is always required") must be verified against primary sources before a plan commits to them. Category: `missing-branch`
+  - **Step 1** gains **Interruption re-anchoring sub-step**: on resumption after an interruption, re-read the plan and confirm current state before continuing. Category: `missing-branch`
+  - **Step 7 sub-step 2** gains **Mock/replay-only coverage self-check**: when new tests pass only via mocks, stubs, or replay fixtures, verify the coverage is not bypassing the real behavior being tested. Category: `missing-branch`
+  - **Step 11 self-retrospective pre-flight** gains **Destination reachability check**: verify the issue-filing destination is reachable before starting the retrospective write phase. Category: `missing-branch`
+  - **Step 11 sub-step 4** gains **Knowledge-preservation fallback**: when `extract-rules` is unavailable, save reusable patterns discovered during the workflow to `.claude/plans/rules-candidates-<date>.md` instead of silently skipping. Category: `missing-branch`
+  - **Step 5 item 4** gains **Comment-conciseness sub-check (vi)**: apply a rule-of-need test to every inline comment in the diff — only why-comments are justified; what-comments and multi-line background explanations are deletion candidates. Fire condition for sub-checks (v) and (vi) extended to all diff edits (previously `.md`-only). Category: `missing-branch`
+
+### peer v2.4.2 / dev-workflow-bundle v1.70.4
+
+- fix(ask-peer): add domain-assumption verification to Planning Review Focus Areas (auto-triage #107)
+  - New bullet instructs the peer reviewer to treat uniqueness or universality claims ("this is the only viable approach", "X is universally required") as hypotheses and verify them against primary sources before confirming or echoing them in feedback. Category: `missing-branch`
+
 ## 2026-06-15
 
 ### dev-workflow v1.69.1 / dev-workflow-bundle v1.70.3
