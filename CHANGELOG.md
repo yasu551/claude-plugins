@@ -2,6 +2,16 @@
 
 ## 2026-06-17
 
+### dev-workflow v1.70.0 / dev-workflow-bundle v1.71.0
+
+- feat(dev-workflow): add an opt-in browser-based **visual plan-review gate** at Step 4 (wires the previously-unwired `scripts/plan-review/serve.mjs` viewer)
+  - **Default: disabled** — set `visual_plan_review: true` in `.claude/dev-workflow.md` (or `~/.claude/dev-workflow.local.md` / `.claude/dev-workflow.local.md`) to opt in per project. Experimental.
+  - When enabled **and the local browser is reachable** (local CLI / Remote Control), Step 4 presents the plan through a browser block-level review gate instead of the text approval: the bundled `scripts/plan-review/serve.mjs` viewer serves the plan on `127.0.0.1`, the user comments per block and chooses **approve** (→ implementation via `ExitPlanMode`) or **revise** (comments applied to the plan, gate re-runs). Approach-level revise comments route to the text path's `rewrite-approach` (Step 3 re-review) so review quality stays symmetric.
+  - **Local-only with transparent fallback**: on Claude Code on the Web (detected via `CLAUDE_CODE_REMOTE="true"` — a remote headless sandbox with no port-forwarding and no display) and on any launch failure (non-zero `serve.mjs` exit, blocked Bash call), Step 4 falls back to the unchanged text approval. The web UI offers no rich review surface beyond chat, so the text path is the appropriate web experience.
+  - The gate launches `serve.mjs` via **background Bash** (`run_in_background`), not the `Agent` tool, so the "exactly three subagent-dispatch steps" invariant is unaffected.
+  - **`SKILL.md`**: `allowed-tools` gains `Bash(node *)` / `Bash(printenv CLAUDE_CODE_REMOTE)`; new `visual_plan_review` Configuration bullet + scalar-key list / Step 1 parse wiring; Step 4 sub-step 2 gains the visual/text branch; § No-Stall Principle lists the gate as an explicit user-gate (harness-tracked background submit boundary, no preamble). New **`references/visual-plan-review.md`** holds the gate procedure. **`README.md`** documents the setting.
+  - **Manual verification (next session)**: the new Step 4 behavior activates only in a session that loads this updated `SKILL.md`, so the end-to-end browser flow is verified manually in a fresh local session with `visual_plan_review: true` (this run's own Step 4 used the prior text path).
+
 ### dev-workflow v1.69.3 / dev-workflow-bundle v1.70.5
 
 - fix(dev-workflow): clarify Simplicity self-audit consistency-with-siblings remedy precedence (recovered from an orphaned stash left by the prior triage run)
